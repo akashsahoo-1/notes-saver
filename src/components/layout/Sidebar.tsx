@@ -1,0 +1,271 @@
+'use client'
+
+import {
+  BookOpen,
+  Search,
+  PlusCircle,
+  FileText,
+  LogOut,
+  FolderClosed,
+  Menu,
+  X,
+  Star,
+} from 'lucide-react'
+import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+import { toast } from 'sonner'
+import { Input } from '@/components/ui/Input'
+import { Button } from '@/components/ui/Button'
+import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { cn } from '@/lib/utils'
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface Subject {
+  id: string
+  name: string
+}
+
+interface FavoriteNote {
+  id: string
+  title: string
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export function Sidebar() {
+  const pathname = usePathname()
+  const router = useRouter()
+  const supabase = createClient()
+  const [isOpen, setIsOpen] = useState(false)
+  const [subjects, setSubjects] = useState<Subject[]>([])
+  const [favoriteNotes, setFavoriteNotes] = useState<FavoriteNote[]>([])
+
+  useEffect(() => {
+    const fetchSubjects = async () => {
+      const { data } = await supabase
+        .from('subjects')
+        .select('id, name')
+        .order('created_at', { ascending: false })
+      if (data) setSubjects(data as Subject[])
+    }
+
+    const fetchFavorites = async () => {
+      const { data } = await supabase
+        .from('notes')
+        .select('id, title')
+        .eq('is_favorite', true)
+        .order('created_at', { ascending: false })
+      if (data) setFavoriteNotes(data as FavoriteNote[])
+    }
+
+    fetchSubjects()
+    fetchFavorites()
+
+    // Realtime: subjects
+    const subjectsChannel = supabase
+      .channel('sidebar_subjects')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'subjects' },
+        fetchSubjects
+      )
+      .subscribe()
+
+    // Realtime: favorite notes
+    const favoritesChannel = supabase
+      .channel('sidebar_favorites')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notes' },
+        fetchFavorites
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(subjectsChannel)
+      supabase.removeChannel(favoritesChannel)
+    }
+  }, [supabase])
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    toast.success('Logged out successfully')
+    router.push('/login')
+  }
+
+  const SidebarContent = (
+    <div className="flex h-full w-full flex-col bg-zinc-950/50 shadow-xl border-r border-zinc-900 backdrop-blur-xl">
+      {/* Logo */}
+      <div className="flex h-16 items-center gap-3 px-6 border-b border-zinc-900 shrink-0">
+        <div className="flex items-center justify-center rounded-lg bg-zinc-800 p-2 shadow-inner">
+          <BookOpen className="h-5 w-5 text-zinc-100" />
+        </div>
+        <span className="text-lg font-semibold tracking-tight text-zinc-100">Notes Saver</span>
+      </div>
+
+      <div className="flex flex-col gap-5 overflow-y-auto p-4 custom-scrollbar flex-1">
+        {/* Search */}
+        <div className="px-2">
+          <Input
+            placeholder="Search notes..."
+            icon={<Search className="h-4 w-4" />}
+            className="bg-zinc-900 border-zinc-800"
+          />
+        </div>
+
+        {/* Overview nav */}
+        <nav className="flex flex-col gap-1 px-2">
+          <h2 className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            Overview
+          </h2>
+          <NavItem href="/dashboard/notes"        icon={FileText}   label="All Notes"    active={pathname === '/dashboard/notes'} />
+          <NavItem href="/dashboard/notes/create"  icon={PlusCircle} label="Create Note"  active={pathname === '/dashboard/notes/create'} />
+        </nav>
+
+        {/* Favorites */}
+        {favoriteNotes.length > 0 && (
+          <div className="flex flex-col gap-1 px-2">
+            <h2 className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
+              <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
+              Favorites
+            </h2>
+            {favoriteNotes.map((note) => (
+              <NavItem
+                key={note.id}
+                href={`/dashboard/notes/${note.id}`}
+                icon={Star}
+                label={note.title}
+                active={pathname === `/dashboard/notes/${note.id}`}
+                iconClassName="text-amber-400 fill-amber-400"
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Subjects */}
+        <div className="flex flex-col gap-1 px-2">
+          <div className="mb-2 flex items-center justify-between px-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Subjects
+            </h2>
+            <Link
+              href="/dashboard/subjects"
+              className="text-zinc-400 hover:text-zinc-100 transition-colors"
+            >
+              <PlusCircle className="h-4 w-4" />
+            </Link>
+          </div>
+          {subjects.length === 0 ? (
+            <div className="px-2 py-3 text-sm text-zinc-500">No subjects yet</div>
+          ) : (
+            subjects.map((subject) => (
+              <NavItem
+                key={subject.id}
+                href={`/dashboard/subjects/${subject.id}`}
+                icon={FolderClosed}
+                label={subject.name}
+                active={pathname === `/dashboard/subjects/${subject.id}`}
+              />
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Logout */}
+      <div className="p-4 border-t border-zinc-900 shrink-0">
+        <Button
+          variant="ghost"
+          onClick={handleLogout}
+          className="w-full justify-start gap-3 px-2 text-zinc-400 hover:text-red-400 hover:bg-red-400/10"
+        >
+          <LogOut className="h-4 w-4" />
+          <span>Log out</span>
+        </Button>
+      </div>
+    </div>
+  )
+
+  return (
+    <>
+      {/* Mobile top bar */}
+      <div className="md:hidden fixed top-0 left-0 z-40 w-full bg-zinc-950/80 backdrop-blur-md border-b border-zinc-900 p-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <BookOpen className="h-5 w-5 text-zinc-100" />
+          <span className="font-semibold text-zinc-100">Notes Saver</span>
+        </div>
+        <button className="text-zinc-400" onClick={() => setIsOpen(true)}>
+          <Menu className="h-6 w-6" />
+        </button>
+      </div>
+
+      {/* Mobile overlay */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+            onClick={() => setIsOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <motion.aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-50 w-72 transform md:relative md:translate-x-0 transition-transform duration-300',
+          isOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
+        {SidebarContent}
+        {isOpen && (
+          <button
+            className="absolute top-4 right-4 text-zinc-400 md:hidden"
+            onClick={() => setIsOpen(false)}
+          >
+            <X className="h-6 w-6" />
+          </button>
+        )}
+      </motion.aside>
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// NavItem sub-component
+// ---------------------------------------------------------------------------
+
+interface NavItemProps {
+  href: string
+  icon: React.ElementType
+  label: string
+  active: boolean
+  iconClassName?: string
+}
+
+function NavItem({ href, icon: Icon, label, active, iconClassName }: NavItemProps) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        'group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+        active ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-100'
+      )}
+    >
+      <Icon
+        className={cn(
+          'h-4 w-4 shrink-0',
+          iconClassName ?? (active ? 'text-zinc-50' : 'text-zinc-500 group-hover:text-zinc-300')
+        )}
+      />
+      <span className="truncate">{label}</span>
+    </Link>
+  )
+}
