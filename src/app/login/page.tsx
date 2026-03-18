@@ -11,16 +11,17 @@ export default function LoginPage() {
   const supabase = createClient()
 
   const handleLogin = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    })
+    const redirectUrl =
+      process.env.NODE_ENV === "production"
+        ? "https://notes-saver.vercel.app/auth/callback"
+        : "http://localhost:3000/auth/callback";
 
-    if (error) {
-      console.error(error)
-    }
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: redirectUrl,
+      },
+    });
   }
 
   return (
