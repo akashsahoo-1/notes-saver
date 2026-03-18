@@ -13,7 +13,15 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
-const ACCEPTED_FILE_TYPES = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png']
+const ACCEPTED_FILE_TYPES = [
+  'application/pdf', 
+  'image/jpeg', 
+  'image/jpg', 
+  'image/png',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '' // some OS don't send right types for pptx
+]
 
 const noteSchema = z.object({
   title: z.string().min(1, 'Title is required').max(100, 'Title is too long'),
@@ -51,8 +59,8 @@ export default function CreateNotePage() {
       return
     }
 
-    if (!ACCEPTED_FILE_TYPES.includes(selectedFile.type)) {
-      toast.error('Invalid file type', { description: 'Only PDF, PNG, JPG are allowed.' })
+    if (!ACCEPTED_FILE_TYPES.includes(selectedFile.type) && !selectedFile.name.match(/\.(ppt|pptx|pdf|png|jpe?g)$/i)) {
+      toast.error('Invalid file type', { description: 'Only PDF, PNG, JPG, PPT, PPTX are allowed.' })
       return
     }
 
@@ -63,30 +71,35 @@ export default function CreateNotePage() {
     setIsUploading(true)
 
     try {
+      if (file) {
+        // AI processing path for files
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('title', data.title)
+        formData.append('subject_id', data.subject_id)
+
+        const res = await fetch('/api/process-file', {
+          method: 'POST',
+          body: formData
+        })
+
+        const result = await res.json()
+
+        if (!res.ok) {
+          throw new Error(result.error || 'Failed to process file')
+        }
+
+        toast.success('Notes generated successfully!')
+        router.push(`/dashboard/notes/${result.noteId}`)
+        return
+      }
+
+      // NO FILE - Manual save
       const { data: userData } = await supabase.auth.getUser()
       if (!userData.user) throw new Error('Not authenticated')
 
       const userId = userData.user.id
       const noteId = crypto.randomUUID()
-      let filePath = null
-      let fileType = null
-
-      if (file) {
-        // Upload file to Supabase Storage
-        // Path: users/{user_id}/{note_id}/{filename}
-        const fileExt = file.name.split('.').pop()
-        const fileName = `${crypto.randomUUID()}.${fileExt}`
-        const storagePath = `users/${userId}/${noteId}/${fileName}`
-
-        const { error: uploadError } = await supabase.storage
-          .from('notes-attachments')
-          .upload(storagePath, file)
-
-        if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`)
-
-        filePath = storagePath
-        fileType = file.type
-      }
 
       const { error: insertError } = await supabase.from('notes').insert({
         id: noteId,
@@ -94,8 +107,8 @@ export default function CreateNotePage() {
         subject_id: data.subject_id,
         title: data.title,
         content: data.content,
-        file_path: filePath,
-        file_type: fileType,
+        file_path: null,
+        file_type: null,
       })
 
       if (insertError) throw new Error(`Failed to save note: ${insertError.message}`)
@@ -104,7 +117,13 @@ export default function CreateNotePage() {
       router.push(`/dashboard/notes/${noteId}`)
 
     } catch (error: any) {
-      toast.error('Error', { description: error.message })
+      toast.error('Error', { 
+        description: error.message,
+        action: error.message.includes('AI failed') || error.message.includes('Text extraction') ? {
+          label: 'Retry',
+          onClick: () => onSubmit(data)
+        } : undefined
+      })
     } finally {
       setIsUploading(false)
     }
@@ -189,14 +208,14 @@ export default function CreateNotePage() {
                   type="file"
                   className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                   onChange={handleFileChange}
-                  accept=".pdf,image/png,image/jpeg,image/jpg"
+                  accept=".pdf,image/png,image/jpeg,image/jpg,.ppt,.pptx"
                 />
                 <div className="flex flex-col items-center justify-center text-center">
                   <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-900 shadow-inner">
                     <UploadCloud className="h-6 w-6 text-zinc-400" />
                   </div>
                   <p className="mb-1 text-sm font-medium text-zinc-200">Click to upload or drag and drop</p>
-                  <p className="text-xs text-zinc-500">PDF, PNG, JPG (max. 10MB)</p>
+                  <p className="text-xs text-zinc-500">PDF, PPTX, PNG, JPG (max. 10MB)</p>
                 </div>
               </div>
             )}
