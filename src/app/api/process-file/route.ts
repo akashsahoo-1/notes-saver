@@ -6,7 +6,7 @@ export async function POST(req: Request) {
   try {
     const supabase = await createClient()
 
-    const user = { id: 'default-user-id' }
+    const user = { id: 'anonymous' }
 
     // 2. Parse Form Data
     const formData = await req.formData()
@@ -91,7 +91,6 @@ ${extractedText}`
     // from the prompt requirement: Store in "notes" table: [id, user_id, title, content (AI result), file_type, created_at]
     const { error: insertError } = await supabase.from('notes').insert({
       id: noteId,
-      user_id: user.id,
       subject_id: subjectId,
       title: title,
       content: aiResult,

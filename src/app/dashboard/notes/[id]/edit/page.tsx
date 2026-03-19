@@ -101,7 +101,7 @@ export default function EditNotePage() {
     setIsUploading(true)
     
     try {
-      const userId = "default-user-id"
+      const userId = "anonymous"
       let finalFilePath = existingFile ? existingFile.path : null
       let finalFileType = null // We don't have this easily available for existing, handled in logic
 

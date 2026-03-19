@@ -95,12 +95,10 @@ export default function CreateNotePage() {
       }
 
       // NO FILE - Manual save
-      const userId = "default-user-id"
       const noteId = crypto.randomUUID()
 
       const { error: insertError } = await supabase.from('notes').insert({
         id: noteId,
-        user_id: userId,
         subject_id: data.subject_id,
         title: data.title,
         content: data.content,
