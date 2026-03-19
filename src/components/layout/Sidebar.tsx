@@ -95,7 +95,6 @@ export function Sidebar() {
   }, [supabase])
 
   const handleLogout = async () => {
-    await supabase.auth.signOut()
     toast.success('Logged out successfully')
     router.push('/login')
   }

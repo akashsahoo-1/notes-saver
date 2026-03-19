@@ -95,10 +95,7 @@ export default function CreateNotePage() {
       }
 
       // NO FILE - Manual save
-      const { data: userData } = await supabase.auth.getUser()
-      if (!userData.user) throw new Error('Not authenticated')
-
-      const userId = userData.user.id
+      const userId = "default-user-id"
       const noteId = crypto.randomUUID()
 
       const { error: insertError } = await supabase.from('notes').insert({

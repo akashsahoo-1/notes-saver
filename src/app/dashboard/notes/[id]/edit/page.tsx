@@ -101,10 +101,7 @@ export default function EditNotePage() {
     setIsUploading(true)
     
     try {
-      const { data: userData } = await supabase.auth.getUser()
-      if (!userData.user) throw new Error('Not authenticated')
-      
-      const userId = userData.user.id
+      const userId = "default-user-id"
       let finalFilePath = existingFile ? existingFile.path : null
       let finalFileType = null // We don't have this easily available for existing, handled in logic
 

@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/Button'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
 
   const { count: subjectCount } = await supabase.from('subjects').select('*', { count: 'exact', head: true })
   const { count: notesCount } = await supabase.from('notes').select('*', { count: 'exact', head: true })
@@ -14,7 +13,7 @@ export default async function DashboardPage() {
     <div className="flex h-full flex-col p-6 md:p-10 max-w-5xl mx-auto">
       <div className="mb-10 flex flex-col items-start gap-2 pt-10 md:pt-0">
         <h1 className="text-3xl font-bold tracking-tight text-white md:text-4xl">
-          Welcome back, {user?.email?.split('@')[0] || 'Student'}! 👋
+          Welcome back, Student! 👋
         </h1>
         <p className="text-zinc-400">Here's a quick overview of your study materials.</p>
       </div>

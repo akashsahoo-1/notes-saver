@@ -53,12 +53,9 @@ export default function SubjectsPage() {
   }
 
   const onCreateSubmit = async (data: SubjectFormValues) => {
-    const { data: userData } = await supabase.auth.getUser()
-    if (!userData.user) return
-
     const { error } = await supabase.from('subjects').insert({
       name: data.name,
-      user_id: userData.user.id
+      user_id: "default-user-id"
     })
 
     if (error) {
