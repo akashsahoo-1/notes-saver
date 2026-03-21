@@ -10,20 +10,18 @@ import {
   Menu,
   X,
   Star,
+  User,
+  Library,
+  Zap
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/Input'
-import { Button } from '@/components/ui/Button'
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 interface Subject {
   id: string
@@ -35,10 +33,6 @@ interface FavoriteNote {
   title: string
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
@@ -46,14 +40,17 @@ export function Sidebar() {
   const [isOpen, setIsOpen] = useState(false)
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [favoriteNotes, setFavoriteNotes] = useState<FavoriteNote[]>([])
+  const [notesCount, setNotesCount] = useState(0)
+  const [subjectsCount, setSubjectsCount] = useState(0)
 
   useEffect(() => {
     const fetchSubjects = async () => {
-      const { data } = await supabase
+      const { data, count } = await supabase
         .from('subjects')
-        .select('id, name')
+        .select('id, name', { count: 'exact' })
         .order('created_at', { ascending: false })
       if (data) setSubjects(data as Subject[])
+      if (count !== null) setSubjectsCount(count)
     }
 
     const fetchFavorites = async () => {
@@ -65,32 +62,27 @@ export function Sidebar() {
       if (data) setFavoriteNotes(data as FavoriteNote[])
     }
 
+    const fetchNotesCount = async () => {
+      const { count } = await supabase
+        .from('notes')
+        .select('*', { count: 'exact', head: true })
+      if (count !== null) setNotesCount(count)
+    }
+
     fetchSubjects()
     fetchFavorites()
+    fetchNotesCount()
 
-    // Realtime: subjects
-    const subjectsChannel = supabase
-      .channel('sidebar_subjects')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'subjects' },
-        fetchSubjects
-      )
-      .subscribe()
-
-    // Realtime: favorite notes
-    const favoritesChannel = supabase
-      .channel('sidebar_favorites')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'notes' },
-        fetchFavorites
-      )
+    const channels = supabase.channel('custom-all-channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'subjects' }, fetchSubjects)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, () => {
+        fetchFavorites()
+        fetchNotesCount()
+      })
       .subscribe()
 
     return () => {
-      supabase.removeChannel(subjectsChannel)
-      supabase.removeChannel(favoritesChannel)
+      supabase.removeChannel(channels)
     }
   }, [supabase])
 
@@ -100,39 +92,56 @@ export function Sidebar() {
   }
 
   const SidebarContent = (
-    <div className="flex h-full w-full flex-col bg-[#0f172a]/95 text-slate-100 shadow-2xl border-r border-slate-800 backdrop-blur-2xl">
-      {/* Logo */}
-      <div className="flex h-16 items-center gap-3.5 px-6 border-b border-slate-800 shrink-0">
-        <div className="flex items-center justify-center rounded-xl bg-indigo-500 p-2 shadow-lg shadow-indigo-500/30">
-          <BookOpen className="h-5 w-5 text-white" />
+    <div className="flex h-full w-full flex-col bg-white/5 backdrop-blur-2xl border-r border-white/10 text-slate-100 shadow-[20px_0_40px_-20px_rgba(0,0,0,0.5)] z-20">
+      
+      {/* Top Header */}
+      <div className="flex flex-col px-6 pt-8 pb-5 shrink-0 border-b border-white/5">
+        <div className="flex items-center gap-3.5">
+          <div className="flex items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 p-2 shadow-[0_0_20px_rgba(168,85,247,0.4)]">
+            <Zap className="h-5 w-5 text-white" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-400">Notes Saver</span>
+            <span className="text-[10px] uppercase tracking-widest text-[#a1a1aa] font-bold">AI Study Assistant</span>
+          </div>
         </div>
-        <span className="text-xl font-bold tracking-tight text-white">Notes Saver</span>
       </div>
 
-      <div className="flex flex-col gap-6 overflow-y-auto p-4 custom-scrollbar flex-1">
+      <div className="flex flex-col gap-6 overflow-y-auto p-5 custom-scrollbar flex-1 relative z-10">
+        
         {/* Search */}
-        <div className="px-2">
+        <div className="relative group px-1">
           <Input
             placeholder="Search notes..."
-            icon={<Search className="h-4 w-4 text-slate-400" />}
-            className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-500 focus:bg-[#1e293b] rounded-xl"
+            icon={<Search className="h-4 w-4 text-slate-400 group-hover:text-purple-400 transition-colors" />}
+            className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:bg-white/10 focus:border-purple-500/50 rounded-2xl transition-all shadow-inner h-11"
           />
         </div>
 
+        {/* Stats Section */}
+        <div className="grid grid-cols-2 gap-3 px-1">
+          <div className="flex flex-col p-4 rounded-3xl bg-gradient-to-br from-purple-500/10 to-blue-500/10 border border-white/5 shadow-inner hover:scale-105 transition-transform duration-300">
+            <span className="text-2xl font-black text-white">{notesCount}</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">Total Notes</span>
+          </div>
+          <div className="flex flex-col p-4 rounded-3xl bg-gradient-to-br from-pink-500/10 to-purple-500/10 border border-white/5 shadow-inner hover:scale-105 transition-transform duration-300">
+            <span className="text-2xl font-black text-white">{subjectsCount}</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">Subjects</span>
+          </div>
+        </div>
+
         {/* Overview nav */}
-        <nav className="flex flex-col gap-1.5 px-2">
-          <h2 className="mb-2.5 px-2 text-[11px] font-bold uppercase tracking-widest text-slate-500/80">
-            Overview
-          </h2>
-          <NavItem href="/dashboard/notes"        icon={FileText}   label="All Notes"    active={pathname === '/dashboard/notes'} />
-          <NavItem href="/dashboard/notes/create"  icon={PlusCircle} label="Create Note"  active={pathname === '/dashboard/notes/create'} />
+        <nav className="flex flex-col gap-1.5 px-1 mt-2">
+          <h2 className="mb-2 px-3 text-[10px] font-black uppercase tracking-widest text-slate-500/80">Overview</h2>
+          <NavItem href="/dashboard/notes" icon={Library} label="All Notes" active={pathname === '/dashboard/notes'} />
+          <NavItem href="/dashboard/notes/create" icon={PlusCircle} label="Create Note" active={pathname === '/dashboard/notes/create'} />
         </nav>
 
         {/* Favorites */}
         {favoriteNotes.length > 0 && (
-          <div className="flex flex-col gap-1.5 px-2">
-            <h2 className="mb-2.5 px-2 text-[11px] font-bold uppercase tracking-widest text-slate-500/80 flex items-center gap-1.5">
-              <Star className="h-3 w-3 text-yellow-400 fill-yellow-400 opacity-80" />
+          <div className="flex flex-col gap-1.5 px-1 mt-2">
+            <h2 className="mb-2 px-3 text-[10px] font-black uppercase tracking-widest text-slate-500/80 flex items-center gap-2">
+              <Star className="h-3 w-3 text-pink-400 fill-pink-400/50" />
               Favorites
             </h2>
             {favoriteNotes.map((note) => (
@@ -142,28 +151,22 @@ export function Sidebar() {
                 icon={Star}
                 label={note.title}
                 active={pathname === `/dashboard/notes/${note.id}`}
-                iconClassName="text-yellow-400 fill-yellow-400/50"
+                iconClassName="text-pink-400 fill-pink-400/30"
               />
             ))}
           </div>
         )}
 
         {/* Subjects */}
-        <div className="flex flex-col gap-1.5 px-2">
-          <div className="mb-2.5 flex items-center justify-between px-2">
-            <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-500/80">
-              Subjects
-            </h2>
-            <Link
-              href="/dashboard/subjects"
-              className="text-slate-400 hover:text-indigo-400 transition-colors p-1 rounded-md hover:bg-indigo-500/10"
-              aria-label="Add Subject"
-            >
+        <div className="flex flex-col gap-1.5 px-1 mt-2 mb-4">
+          <div className="mb-2 flex items-center justify-between px-3">
+            <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-500/80">Subjects</h2>
+            <Link href="/dashboard/subjects" className="text-slate-400 hover:text-purple-400 transition-colors p-1 rounded-lg hover:bg-purple-500/10">
               <PlusCircle className="h-4 w-4" />
             </Link>
           </div>
           {subjects.length === 0 ? (
-            <div className="px-3 py-4 text-sm text-slate-500 bg-slate-800/30 rounded-xl text-center border border-slate-800/50 border-dashed">No subjects yet</div>
+            <div className="mx-2 py-5 text-xs font-medium text-slate-500 bg-white/5 rounded-2xl text-center border border-white/5 border-dashed">No subjects yet</div>
           ) : (
             subjects.map((subject) => (
               <NavItem
@@ -177,32 +180,47 @@ export function Sidebar() {
           )}
         </div>
       </div>
+
+      {/* User Info Bottom */}
+      <div className="mt-auto shrink-0 p-5 border-t border-white/5 bg-black/20">
+        <div className="flex items-center gap-4 p-2.5 rounded-2xl hover:bg-white/5 transition-colors cursor-pointer group pointer-events-auto">
+          <div className="relative h-11 w-11 shrink-0 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 p-0.5 shadow-lg shadow-purple-500/30 group-hover:scale-105 transition-transform duration-300">
+            <div className="h-full w-full rounded-full bg-[#0a0f1d] flex items-center justify-center">
+              <User className="h-5 w-5 text-purple-300" />
+            </div>
+            {/* Online Indicator */}
+            <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-400 border-2 border-[#0a0f1d]" />
+          </div>
+          <div className="flex flex-col overflow-hidden">
+            <span className="text-[15px] font-bold text-white truncate group-hover:text-purple-300 transition-colors">Student User</span>
+            <span className="text-xs text-slate-400 font-medium truncate tracking-wide">Pro Account</span>
+          </div>
+        </div>
+      </div>
     </div>
   )
 
   return (
     <>
-      {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 left-0 z-40 w-full bg-[#0f172a]/90 backdrop-blur-xl border-b border-slate-800 p-4 flex items-center justify-between">
+      <div className="md:hidden fixed top-0 left-0 z-40 w-full bg-[#0a0f1d]/90 backdrop-blur-2xl border-b border-white/10 p-5 flex items-center justify-between shadow-lg">
         <div className="flex items-center gap-3">
-          <div className="bg-indigo-500 p-1.5 rounded-lg shadow-sm">
-            <BookOpen className="h-5 w-5 text-white" />
+          <div className="bg-gradient-to-br from-purple-500 to-pink-500 p-2 rounded-xl shadow-[0_0_15px_rgba(168,85,247,0.5)]">
+            <Zap className="h-5 w-5 text-white" />
           </div>
-          <span className="font-bold text-white tracking-tight">Notes Saver</span>
+          <span className="font-bold text-white tracking-tight text-lg">Notes Saver</span>
         </div>
         <button className="text-slate-400 hover:text-white transition-colors" onClick={() => setIsOpen(true)}>
-          <Menu className="h-6 w-6" />
+          <Menu className="h-7 w-7" />
         </button>
       </div>
 
-      {/* Mobile overlay */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm md:hidden"
+            className="fixed inset-0 z-40 bg-[#0a0f1d]/80 backdrop-blur-md md:hidden"
             onClick={() => setIsOpen(false)}
           />
         )}
@@ -210,14 +228,14 @@ export function Sidebar() {
 
       <motion.aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-[280px] transform md:relative md:translate-x-0 transition-transform duration-300 ease-out',
+          'fixed inset-y-0 left-0 z-50 w-[290px] transform md:relative md:translate-x-0 transition-transform duration-500 ease-[cubic-bezier(0.19,1,0.22,1)]',
           isOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
         {SidebarContent}
         {isOpen && (
           <button
-            className="absolute top-4 right-4 text-slate-400 hover:bg-slate-800 p-1 rounded-full transition-colors md:hidden"
+            className="absolute top-6 right-6 text-slate-400 hover:bg-white/10 p-2 rounded-full transition-colors md:hidden z-50 backdrop-blur-md"
             onClick={() => setIsOpen(false)}
           >
             <X className="h-6 w-6" />
@@ -227,10 +245,6 @@ export function Sidebar() {
     </>
   )
 }
-
-// ---------------------------------------------------------------------------
-// NavItem sub-component
-// ---------------------------------------------------------------------------
 
 interface NavItemProps {
   href: string
@@ -245,19 +259,29 @@ function NavItem({ href, icon: Icon, label, active, iconClassName }: NavItemProp
     <Link
       href={href}
       className={cn(
-        'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200',
+        'group flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-semibold transition-all duration-300 relative overflow-hidden',
         active 
-          ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/20 shadow-inner' 
-          : 'text-slate-400 hover:bg-[#1e293b] hover:text-slate-100 hover:shadow-sm'
+          ? 'text-white' 
+          : 'text-slate-400 hover:bg-white/5 hover:text-white hover:scale-[1.02]'
       )}
     >
+      {/* Active Highlighting */}
+      {active && (
+        <motion.div
+          layoutId="sidebarActiveBg"
+          className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-transparent z-0 border-l-[3px] border-purple-500"
+          initial={false}
+          transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+        />
+      )}
+      
       <Icon
         className={cn(
-          'h-4 w-4 shrink-0 transition-colors',
-          iconClassName ?? (active ? 'text-white' : 'text-slate-500 group-hover:text-indigo-400')
+          'h-[18px] w-[18px] shrink-0 transition-colors z-10',
+          iconClassName ?? (active ? 'text-purple-400' : 'text-slate-500 group-hover:text-purple-300')
         )}
       />
-      <span className="truncate">{label}</span>
+      <span className="truncate z-10">{label}</span>
     </Link>
   )
 }
