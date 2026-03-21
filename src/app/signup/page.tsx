@@ -20,13 +20,9 @@ export default function SignupPage() {
     setIsGoogleLoading(true)
     try {
       const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
+        provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
+          redirectTo: "https://notes-saver-rust.vercel.app/auth/callback"
         }
       })
       if (error) throw error
