@@ -1,11 +1,41 @@
 import { NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 export async function POST(req: Request) {
   try {
-    const { content, subject, deadline } = await req.json()
+    const cookieStore = await cookies()
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll()
+          },
+        },
+      }
+    )
 
-    if (!content) {
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized user' }, { status: 401 })
+    }
+
+    if (!checkRateLimit(user.id)) {
+      return NextResponse.json({ error: 'Too many requests. Please slow down.' }, { status: 429 })
+    }
+
+    let { content, subject, deadline } = await req.json()
+
+    if (!content || typeof content !== 'string' || content.trim().length === 0) {
       return NextResponse.json({ error: 'Note content is required for study plan generation.' }, { status: 400 })
+    }
+
+    content = content.trim()
+    if (content.length > 20000) {
+      return NextResponse.json({ error: 'Content exceeds 20,000 characters limit. Please shorten your note.' }, { status: 400 })
     }
     
     if (!subject || !deadline) {
@@ -13,7 +43,7 @@ export async function POST(req: Request) {
     }
 
     const API_KEY = process.env.GROQ_API_KEY
-    if (!API_KEY) return NextResponse.json({ error: 'Missing API Key' }, { status: 500 })
+    if (!API_KEY) return NextResponse.json({ error: 'Server misconfiguration.' }, { status: 500 })
 
     const numDays = parseInt(deadline, 10);
     if(isNaN(numDays) || numDays <= 0) {
@@ -61,6 +91,6 @@ ${content.substring(0, 15000)}
     return NextResponse.json({ plan: planData })
 
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }

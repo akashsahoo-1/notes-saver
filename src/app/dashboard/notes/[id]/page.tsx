@@ -169,13 +169,14 @@ export default function NoteViewPage() {
         .single()
       if (subData) setSubject(subData as Record<string, unknown>)
 
-      if ((noteData as Record<string, unknown>).file_url) {
-        setPublicUrl((noteData as Record<string, unknown>).file_url as string)
-      } else if ((noteData as Record<string, unknown>).file_path) {
-        const { data: urlData } = supabase.storage
+      if ((noteData as Record<string, unknown>).file_path) {
+        const { data: urlData, error: signedError } = await supabase.storage
           .from(BUCKET)
-          .getPublicUrl((noteData as Record<string, unknown>).file_path as string)
-        if (urlData) setPublicUrl(urlData.publicUrl)
+          .createSignedUrl((noteData as Record<string, unknown>).file_path as string, 60 * 60 * 24)
+        if (urlData) setPublicUrl(urlData.signedUrl)
+        if (signedError) console.warn("Failed to generate signed url", signedError)
+      } else if ((noteData as Record<string, unknown>).file_url) {
+        setPublicUrl((noteData as Record<string, unknown>).file_url as string)
       }
       setIsLoading(false)
     }

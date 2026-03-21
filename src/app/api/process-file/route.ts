@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { extractText } from '@/lib/extractText'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 export const runtime = "nodejs";
 
@@ -10,7 +11,14 @@ export async function POST(req: Request) {
   try {
     const supabase = await createClient()
 
-    const user = { id: 'anonymous' }
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized user' }, { status: 401 })
+    }
+
+    if (!checkRateLimit(user.id)) {
+      return NextResponse.json({ error: 'Too many requests. Please slow down.' }, { status: 429 })
+    }
 
     // 2. Parse Form Data
     const formData = await req.formData()
@@ -111,6 +119,6 @@ ${extractedText}`
     return NextResponse.json({ success: true, noteId, result: aiResult })
     
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }
