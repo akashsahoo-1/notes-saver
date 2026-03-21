@@ -20,6 +20,8 @@ import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/Input'
+import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
@@ -46,6 +48,7 @@ export function Sidebar() {
   const [user, setUser] = useState<SupabaseUser | null>(null)
 
   const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false)
   const profileRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -230,6 +233,17 @@ export function Sidebar() {
             ))
           )}
         </div>
+
+        {/* Action Bottom */}
+        <div className="px-3 mt-8 mb-4">
+          <button 
+             onClick={() => setIsLogoutModalOpen(true)}
+             className="w-full group flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-400 hover:bg-red-500/10 hover:text-red-400 border border-transparent hover:border-red-500/20 transition-all duration-300 shadow-inner"
+           >
+             <LogOut className="h-[18px] w-[18px] shrink-0 text-slate-500 group-hover:text-red-400 transition-colors" />
+             <span>Logout System</span>
+          </button>
+        </div>
       </div>
 
       {/* User Info Bottom */}
@@ -271,14 +285,34 @@ export function Sidebar() {
                 Settings
               </div>
               <div className="h-px bg-white/10 my-1.5 mx-2" />
-              <div onClick={() => { setIsProfileOpen(false); handleLogout() }} className="p-3 hover:bg-red-500/10 rounded-xl cursor-pointer text-sm font-bold text-red-400 hover:text-red-300 transition-colors flex items-center gap-2">
+              <div onClick={() => { setIsProfileOpen(false); setIsLogoutModalOpen(true) }} className="p-3 hover:bg-red-500/10 rounded-xl cursor-pointer text-sm font-bold text-red-400 hover:text-red-300 transition-colors flex items-center gap-2">
                 <LogOut className="h-4 w-4" />
-                Logout
+                Logout Sessions
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      {/* Logout Confirmation Modal */}
+      <Modal isOpen={isLogoutModalOpen} onClose={() => setIsLogoutModalOpen(false)} title="Confirm Logout">
+        <div className="p-8 max-w-sm w-full relative overflow-hidden bg-[#0a0f1d] rounded-3xl border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.8)]">
+          <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-orange-500/5 pointer-events-none" />
+          <div className="relative z-10 flex flex-col items-center">
+            <div className="mx-auto w-16 h-16 flex items-center justify-center rounded-full bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/30 mb-6 shadow-inner">
+              <LogOut className="h-7 w-7 text-red-400" />
+            </div>
+            <h2 className="text-2xl font-black tracking-tight text-white mb-3 text-center drop-shadow-md">Confirm Logout</h2>
+            <p className="text-slate-400 text-center mb-8 font-medium leading-relaxed">
+              Are you sure you want to disconnect? You will need to authenticate again to access your repository.
+            </p>
+            <div className="flex w-full gap-4">
+              <Button variant="outline" className="flex-1 py-5 rounded-2xl border-white/10 text-slate-300 hover:bg-white/10 hover:text-white font-bold" onClick={() => setIsLogoutModalOpen(false)}>Return</Button>
+              <Button variant="danger" className="flex-1 py-5 rounded-2xl bg-gradient-to-r from-red-500 to-orange-500 text-white font-black shadow-[0_5px_20px_rgba(239,68,68,0.4)] hover:shadow-[0_5px_30px_rgba(239,68,68,0.6)] border-0" onClick={handleLogout}>Disconnect</Button>
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 

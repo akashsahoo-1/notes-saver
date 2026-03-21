@@ -33,6 +33,7 @@ import Link from 'next/link'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import { clsx } from 'clsx'
+import { timeAgo } from '@/lib/utils'
 
 const BUCKET = "notes-files";
 
@@ -240,7 +241,7 @@ export default function NoteViewPage() {
     try {
       const { result } = await fetchAI<{ result: string }>('/api/ai', { content, fileUrl: publicUrl, fileType, type: feature })
       
-      const newOutputs = { ...aiOutputs, [feature]: result }
+      const newOutputs = { ...aiOutputs, [feature]: result, [`${feature}_time`]: new Date().toISOString() }
       setAiOutputs(newOutputs)
       if (feature === 'flashcards') setFlipped({})
 
@@ -274,8 +275,13 @@ export default function NoteViewPage() {
       if (data.quiz && data.quiz.length > 0) {
         setQuizQuestions(data.quiz)
         
+        const timestamp = new Date().toISOString()
+        const newAiOutputs = { ...aiOutputs, quiz_time: timestamp }
+        setAiOutputs(newAiOutputs)
+        
         await supabase.from('notes').update({
-          quiz_data: { questions: data.quiz }
+          quiz_data: { questions: data.quiz },
+          ai_outputs: newAiOutputs
         }).eq('id', noteId)
 
         toast.success('Quiz generated!')
@@ -319,8 +325,14 @@ export default function NoteViewPage() {
       const data = await fetchAI<{ plan: StudyDay[] }>('/api/planner', { content, subject: plannerSubject, deadline: plannerDeadline })
       if (data.plan && data.plan.length > 0) {
         setPlannerDays(data.plan)
+        
+        const timestamp = new Date().toISOString()
+        const newAiOutputs = { ...aiOutputs, planner_time: timestamp }
+        setAiOutputs(newAiOutputs)
+        
         await supabase.from('notes').update({
-          study_plan: { days: data.plan, progress: {} }
+          study_plan: { days: data.plan, progress: {} },
+          ai_outputs: newAiOutputs
         }).eq('id', noteId)
         
         toast.success('Study plan generated and saved!')
@@ -480,10 +492,12 @@ export default function NoteViewPage() {
               {/* Standard AI tabs */}
               {(activeTab === 'summary' || activeTab === 'concepts' || activeTab === 'exam') && (
                 <motion.div key={activeTab} {...tabAnim} className="flex flex-col h-full w-full p-6 md:p-8 relative">
-                  {!aiOutputs[activeTab] && !isAiLoading[activeTab] ? (
-                    <AIEmptyState tab={activeTab} onGenerate={() => handleAIGenerate(activeTab)} />
-                  ) : isAiLoading[activeTab] ? (
-                    <AILoadingState tabName={activeTab} />
+                  {!aiOutputs[activeTab] ? (
+                    isAiLoading[activeTab] ? (
+                      <AILoadingState tabName={activeTab} />
+                    ) : (
+                      <AIEmptyState tab={activeTab} onGenerate={() => handleAIGenerate(activeTab)} hasContent={!!noteContent || !!publicUrl} />
+                    )
                   ) : (
                     <div className="flex flex-col gap-5 h-full relative z-10">
                       <div className="flex items-center justify-between">
@@ -491,10 +505,18 @@ export default function NoteViewPage() {
                           <div className="p-2.5 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl shadow-[0_0_15px_rgba(168,85,247,0.4)]">
                             <Zap className="h-5 w-5 text-white" />
                           </div>
-                          <h2 className="text-2xl font-black text-white tracking-tight capitalize drop-shadow-md">{activeTab.replace('-', ' ')}</h2>
+                          <div className="flex flex-col">
+                            <h2 className="text-2xl font-black text-white tracking-tight capitalize drop-shadow-md">{activeTab.replace('-', ' ')}</h2>
+                            {aiOutputs[`${activeTab}_time`] && (
+                              <span className="text-[10px] text-slate-400 font-bold tracking-widest uppercase mt-0.5 opacity-90">
+                                Generated {timeAgo(aiOutputs[`${activeTab}_time`])}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <Button variant="outline" size="sm" onClick={() => handleAIGenerate(activeTab)} className="gap-2 text-xs h-10 px-4 rounded-xl border-white/10 bg-white/5 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.1)] text-white transition-all font-bold">
-                          <RotateCcw className="h-4 w-4" /> <span className="hidden sm:inline">Regenerate</span>
+                        <Button variant="outline" size="sm" onClick={() => handleAIGenerate(activeTab)} disabled={isAiLoading[activeTab]} className="gap-2 text-xs h-10 px-4 rounded-xl border-white/10 bg-white/5 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.1)] text-white transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed">
+                          {isAiLoading[activeTab] ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                          <span className="hidden sm:inline">{isAiLoading[activeTab] ? 'Generating...' : 'Regenerate'}</span>
                         </Button>
                       </div>
                       <div className="prose prose-invert w-full max-w-none rounded-3xl bg-white/5 backdrop-blur-2xl p-6 lg:p-10 border border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.12)] flex-1 hover:border-white/20 transition-all font-medium text-slate-200">
@@ -508,10 +530,12 @@ export default function NoteViewPage() {
               {/* Flashcards */}
               {activeTab === 'flashcards' && (
                 <motion.div key="flashcards" {...tabAnim} className="flex flex-col h-full w-full p-6 md:p-8">
-                  {!aiOutputs.flashcards && !isAiLoading.flashcards ? (
-                    <AIEmptyState tab="flashcards" onGenerate={() => handleAIGenerate('flashcards')} />
-                  ) : isAiLoading.flashcards ? (
-                    <AILoadingState tabName="flashcards" />
+                  {!aiOutputs.flashcards ? (
+                    isAiLoading.flashcards ? (
+                      <AILoadingState tabName="flashcards" />
+                    ) : (
+                      <AIEmptyState tab="flashcards" onGenerate={() => handleAIGenerate('flashcards')} hasContent={!!noteContent || !!publicUrl} />
+                    )
                   ) : (
                     <div className="flex flex-col gap-6 relative z-10">
                       <div className="flex items-center justify-between">
@@ -520,14 +544,22 @@ export default function NoteViewPage() {
                             <CreditCard className="h-5 w-5 text-white" />
                           </div>
                           <div>
-                            <h2 className="text-2xl font-black text-white tracking-tight drop-shadow-md">Flashcards</h2>
-                            <p className="text-xs text-pink-300 font-bold tracking-widest uppercase mt-1 opacity-90">
+                            <div className="flex items-baseline gap-3">
+                              <h2 className="text-2xl font-black text-white tracking-tight drop-shadow-md">Flashcards</h2>
+                              {aiOutputs.flashcards_time && (
+                                <span className="text-[10px] text-slate-400 font-bold tracking-widest uppercase opacity-90">
+                                  Generated {timeAgo(aiOutputs.flashcards_time)}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-pink-300 font-bold tracking-widest uppercase mt-0.5 opacity-90">
                               {flashcards.length} card{flashcards.length !== 1 ? 's' : ''} prepared
                             </p>
                           </div>
                         </div>
-                        <Button variant="outline" size="sm" onClick={() => { handleAIGenerate('flashcards'); setFlipped({}) }} className="gap-2 text-xs h-10 px-4 rounded-xl border-white/10 bg-white/5 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.1)] text-white transition-all font-bold">
-                          <RotateCcw className="h-4 w-4" /> <span className="hidden sm:inline">Regenerate</span>
+                        <Button variant="outline" size="sm" onClick={() => { handleAIGenerate('flashcards'); setFlipped({}) }} disabled={isAiLoading.flashcards} className="gap-2 text-xs h-10 px-4 rounded-xl border-white/10 bg-white/5 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.1)] text-white transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed">
+                          {isAiLoading.flashcards ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                          <span className="hidden sm:inline">{isAiLoading.flashcards ? 'Generating...' : 'Regenerate'}</span>
                         </Button>
                       </div>
                       {flashcards.length === 0 ? (
@@ -549,10 +581,12 @@ export default function NoteViewPage() {
               {/* Quiz */}
               {activeTab === 'quiz' && (
                 <motion.div key="quiz" {...tabAnim} className="flex flex-col h-full w-full p-6 md:p-8">
-                  {quizQuestions.length === 0 && !isQuizLoading ? (
-                    <AIEmptyState tab="quiz" onGenerate={handleGenerateQuiz} />
-                  ) : isQuizLoading ? (
-                    <AILoadingState tabName="quiz" />
+                  {quizQuestions.length === 0 ? (
+                    isQuizLoading ? (
+                      <AILoadingState tabName="quiz" />
+                    ) : (
+                      <AIEmptyState tab="quiz" onGenerate={handleGenerateQuiz} hasContent={!!noteContent || !!publicUrl} />
+                    )
                   ) : (
                     <div className="flex flex-col gap-6 relative z-10 w-full max-w-3xl mx-auto pb-8">
                       <div className="flex items-center justify-between">
@@ -561,16 +595,24 @@ export default function NoteViewPage() {
                             <HelpCircle className="h-5 w-5 text-white" />
                           </div>
                           <div>
-                            <h2 className="text-2xl font-black text-white tracking-tight drop-shadow-md">Smart Quiz</h2>
+                            <div className="flex items-baseline gap-3">
+                              <h2 className="text-2xl font-black text-white tracking-tight drop-shadow-md">Smart Quiz</h2>
+                              {aiOutputs.quiz_time && (
+                                <span className="text-[10px] text-slate-400 font-bold tracking-widest uppercase opacity-90">
+                                  Generated {timeAgo(aiOutputs.quiz_time)}
+                                </span>
+                              )}
+                            </div>
                             {isQuizSubmitted && (
-                               <p className="text-xs text-indigo-300 font-bold tracking-widest uppercase mt-1">
+                               <p className="text-xs text-indigo-300 font-bold tracking-widest uppercase mt-0.5">
                                  Score: {Object.keys(quizAnswers).filter(i => quizAnswers[Number(i)] === quizQuestions[Number(i)].answer).length} / {quizQuestions.length}
                                </p>
                             )}
                           </div>
                         </div>
-                        <Button variant="outline" size="sm" onClick={handleGenerateQuiz} className="gap-2 text-xs h-10 px-4 rounded-xl border-white/10 bg-white/5 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.1)] text-white transition-all font-bold">
-                          <RotateCcw className="h-4 w-4" /> <span className="hidden sm:inline">Regenerate</span>
+                        <Button variant="outline" size="sm" onClick={handleGenerateQuiz} disabled={isQuizLoading} className="gap-2 text-xs h-10 px-4 rounded-xl border-white/10 bg-white/5 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.1)] text-white transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed">
+                          {isQuizLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                          <span className="hidden sm:inline">{isQuizLoading ? 'Generating...' : 'Regenerate'}</span>
                         </Button>
                       </div>
 
@@ -626,46 +668,49 @@ export default function NoteViewPage() {
               {/* Planner */}
               {activeTab === 'planner' && (
                 <motion.div key="planner" {...tabAnim} className="flex flex-col h-full w-full p-6 md:p-8 overflow-y-auto custom-scrollbar">
-                  {!isPlannerLoading && plannerDays.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center flex-1 text-center py-16 px-8 rounded-[2rem] border border-white/10 border-dashed bg-white/5 backdrop-blur-xl shadow-lg relative overflow-hidden w-full max-w-2xl mx-auto">
-                      <div className="p-5 bg-gradient-to-br from-teal-500/20 to-emerald-500/20 rounded-3xl mb-6 border border-teal-500/30">
-                        <CalendarDays className="h-10 w-10 text-teal-300" />
-                      </div>
-                      <h3 className="text-2xl font-black text-white mb-3 tracking-tight drop-shadow-md">AI Study Planner</h3>
-                      <p className="text-slate-300 mb-8 max-w-md leading-relaxed font-medium">
-                        Set your subject and deadline, and let the AI generate a day-wise timeline to master this content.
-                      </p>
-                      
-                      <div className="w-full max-w-sm flex flex-col gap-4 mb-8">
-                        <div className="flex flex-col text-left gap-1.5">
-                          <label className="text-xs font-bold tracking-widest uppercase text-slate-400">Subject Goal</label>
-                          <input 
-                            type="text" 
-                            value={plannerSubject} 
-                            onChange={e => setPlannerSubject(e.target.value)} 
-                            placeholder="e.g. Master Calculus" 
-                            className="bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-teal-500/50 outline-none w-full shadow-inner"
-                          />
+                  {plannerDays.length === 0 ? (
+                    isPlannerLoading ? (
+                      <AILoadingState tabName="planner" />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center flex-1 text-center py-16 px-8 rounded-[2rem] border border-white/10 border-dashed bg-white/5 backdrop-blur-xl shadow-lg relative overflow-hidden w-full max-w-2xl mx-auto">
+                        <div className="p-5 bg-gradient-to-br from-teal-500/20 to-emerald-500/20 rounded-3xl mb-6 border border-teal-500/30">
+                          <CalendarDays className="h-10 w-10 text-teal-300" />
                         </div>
-                        <div className="flex flex-col text-left gap-1.5">
-                          <label className="text-xs font-bold tracking-widest uppercase text-slate-400">Deadline (Days)</label>
-                          <input 
-                            type="number" 
-                            min="1"
-                            max="60"
-                            value={plannerDeadline} 
-                            onChange={e => setPlannerDeadline(e.target.value)} 
-                            className="bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-teal-500/50 outline-none w-full shadow-inner"
-                          />
+                        <h3 className="text-2xl font-black text-white mb-3 tracking-tight drop-shadow-md">AI Study Planner</h3>
+                        <p className="text-slate-300 mb-8 max-w-md leading-relaxed font-medium">
+                          {noteContent || publicUrl ? "Set your subject and deadline, and let the AI generate a day-wise timeline to master this content." : "Write something to generate AI content. The planner will structure your content mastery."}
+                        </p>
+                        
+                        <div className="w-full max-w-sm flex flex-col gap-4 mb-8">
+                          <div className="flex flex-col text-left gap-1.5">
+                            <label className="text-xs font-bold tracking-widest uppercase text-slate-400">Subject Goal</label>
+                            <input 
+                              type="text" 
+                              value={plannerSubject} 
+                              onChange={e => setPlannerSubject(e.target.value)} 
+                              placeholder="e.g. Master Calculus" 
+                              className="bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-teal-500/50 outline-none w-full shadow-inner"
+                            />
+                          </div>
+                          <div className="flex flex-col text-left gap-1.5">
+                            <label className="text-xs font-bold tracking-widest uppercase text-slate-400">Deadline (Days)</label>
+                            <input 
+                              type="number" 
+                              min="1"
+                              max="60"
+                              value={plannerDeadline} 
+                              onChange={e => setPlannerDeadline(e.target.value)} 
+                              className="bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-teal-500/50 outline-none w-full shadow-inner"
+                            />
+                          </div>
                         </div>
-                      </div>
 
-                      <Button onClick={handleGeneratePlanner} className="gap-3 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-white rounded-xl shadow-[0_0_20px_rgba(20,184,166,0.5)] px-8 py-6 text-[15px] font-bold border-0 hover:scale-105 active:scale-95 transition-all w-full max-w-sm">
-                        <Calendar className="h-5 w-5" /> Generate My Plan
-                      </Button>
-                    </div>
-                  ) : isPlannerLoading ? (
-                    <AILoadingState tabName="planner" />
+                        <Button onClick={handleGeneratePlanner} disabled={isPlannerLoading} className="gap-3 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-white rounded-xl shadow-[0_0_20px_rgba(20,184,166,0.5)] px-8 py-6 text-[15px] font-bold border-0 hover:scale-105 active:scale-95 transition-all w-full max-w-sm disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed">
+                          {isPlannerLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Calendar className="h-5 w-5" />} 
+                          {isPlannerLoading ? 'Generating...' : 'Generate My Plan'}
+                        </Button>
+                      </div>
+                    )
                   ) : (
                     <div className="flex flex-col gap-8 relative z-10 w-full max-w-3xl mx-auto pb-8">
                        <div className="flex items-center justify-between">
@@ -673,10 +718,18 @@ export default function NoteViewPage() {
                            <div className="p-2.5 bg-gradient-to-br from-teal-500 to-emerald-500 rounded-xl shadow-[0_0_15px_rgba(20,184,166,0.4)]">
                              <CalendarDays className="h-5 w-5 text-white" />
                            </div>
-                           <h2 className="text-2xl font-black text-white tracking-tight drop-shadow-md">Study Plan</h2>
+                           <div className="flex flex-col">
+                             <h2 className="text-2xl font-black text-white tracking-tight drop-shadow-md">Study Plan</h2>
+                             {aiOutputs.planner_time && (
+                               <span className="text-[10px] text-slate-400 font-bold tracking-widest uppercase mt-0.5 opacity-90">
+                                 Generated {timeAgo(aiOutputs.planner_time)}
+                               </span>
+                             )}
+                           </div>
                          </div>
-                         <Button variant="outline" size="sm" onClick={() => { setPlannerDays([]); setPlannerProgress({}) }} className="gap-2 text-xs h-10 px-4 rounded-xl border-white/10 bg-white/5 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.1)] text-white transition-all font-bold">
-                           <RotateCcw className="h-4 w-4" /> <span className="hidden sm:inline">New Plan</span>
+                         <Button variant="outline" size="sm" onClick={handleGeneratePlanner} disabled={isPlannerLoading} className="gap-2 text-xs h-10 px-4 rounded-xl border-white/10 bg-white/5 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.1)] text-white transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed">
+                           {isPlannerLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                           <span className="hidden sm:inline">{isPlannerLoading ? 'Generating...' : 'Regenerate Plan'}</span>
                          </Button>
                        </div>
                        
@@ -938,7 +991,7 @@ const AI_TAB_LABELS: Record<string, string> = {
   planner:    'Study Planner',
 }
 
-function AIEmptyState({ tab, onGenerate }: { tab: string; onGenerate: () => void }) {
+function AIEmptyState({ tab, onGenerate, hasContent }: { tab: string; onGenerate: () => void; hasContent: boolean }) {
   return (
     <div className="flex flex-col items-center justify-center flex-1 text-center py-20 px-8 rounded-[2rem] border border-white/10 border-dashed bg-white/5 backdrop-blur-xl shadow-lg transition-all duration-500 hover:bg-white/10 group relative overflow-hidden">
       
@@ -951,7 +1004,7 @@ function AIEmptyState({ tab, onGenerate }: { tab: string; onGenerate: () => void
       <h3 className="text-2xl font-black text-white mb-3 tracking-tight drop-shadow-md relative z-10">Generate {AI_TAB_LABELS[tab] ?? tab}</h3>
       
       <p className="text-base text-slate-300 mb-10 max-w-[360px] leading-relaxed font-medium relative z-10">
-        Initiate sequence to synthesize document intelligence into pristine study materials natively.
+        {hasContent ? "Initiate sequence to synthesize document intelligence into pristine study materials natively." : "Write something to generate AI content. A blank canvas awaits your notes."}
       </p>
       
       <Button onClick={onGenerate} className="gap-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 text-white rounded-full shadow-[0_0_20px_rgba(168,85,247,0.5)] hover:shadow-[0_0_30px_rgba(168,85,247,0.7)] px-8 py-7 transition-all hover:scale-105 active:scale-95 text-[15px] font-bold border-0 relative z-10">

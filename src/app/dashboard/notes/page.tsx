@@ -86,7 +86,7 @@ export default function NotesPage() {
             {searchQuery ? "No coordinates matched" : "Empty Repository"}
           </h3>
           <p className="text-slate-300 mb-8 max-w-[360px] leading-relaxed font-medium relative z-10">
-            {searchQuery ? "Try a different search query or clear the filter boundaries." : "Initialize your first intelligent note to commence the study sequence."}
+            {searchQuery ? "Try a different search query or clear the filter boundaries." : "Create your first note 🚀"}
           </p>
           {!searchQuery && (
             <Link href="/dashboard/notes/create" className="relative z-10">
