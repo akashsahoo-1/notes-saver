@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { fetchAI } from '@/lib/ai/client'
 import { useParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -150,6 +151,16 @@ export default function NoteViewPage() {
         setPlannerProgress(rawPlan.progress || {})
       }
 
+      const rawAiOutputs = (noteData as Record<string, any>).ai_outputs;
+      if (rawAiOutputs) {
+        setAiOutputs(rawAiOutputs)
+      }
+
+      const rawQuizData = (noteData as Record<string, any>).quiz_data;
+      if (rawQuizData && rawQuizData.questions) {
+        setQuizQuestions(rawQuizData.questions)
+      }
+
       const { data: subData } = await supabase
         .from('subjects')
         .select('*')
@@ -221,28 +232,24 @@ export default function NoteViewPage() {
     const fileType = note.file_type as string | undefined
 
     if (!content && fileType !== 'application/pdf') {
-      toast.error('No content or PDF attachment available to analyze')
+      toast.error('Write something first to generate AI content')
       return
     }
 
     setIsAiLoading((prev) => ({ ...prev, [feature]: true }))
     try {
-      const res = await fetch('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, fileUrl: publicUrl, fileType, type: feature }),
-      })
-      if (!res.ok) {
-        const { error } = (await res.json()) as { error?: string }
-        throw new Error(error ?? 'Failed to generate response')
-      }
-      const { result } = (await res.json()) as { result: string }
-      setAiOutputs((prev) => ({ ...prev, [feature]: result }))
+      const { result } = await fetchAI<{ result: string }>('/api/ai', { content, fileUrl: publicUrl, fileType, type: feature })
+      
+      const newOutputs = { ...aiOutputs, [feature]: result }
+      setAiOutputs(newOutputs)
       if (feature === 'flashcards') setFlipped({})
+
+      const { error } = await supabase.from('notes').update({ ai_outputs: newOutputs }).eq('id', noteId)
+      if (error) console.warn("Failed to persist ai_outputs locally, but continuing.")
+      
       toast.success(`${feature.charAt(0).toUpperCase() + feature.slice(1)} generated!`)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error'
-      toast.error(`Failed to generate ${feature}`, { description: message })
+      toast.error('Something went wrong. Try again.')
     } finally {
       setIsAiLoading((prev) => ({ ...prev, [feature]: false }))
     }
@@ -253,7 +260,7 @@ export default function NoteViewPage() {
     if (!note) return
     const content = (note.content as string | undefined) ?? ''
     if (!content) {
-      toast.error('No content available to generate a quiz')
+      toast.error('Write something first to generate AI content')
       return
     }
 
@@ -263,25 +270,20 @@ export default function NoteViewPage() {
     setQuizQuestions([])
     
     try {
-      const res = await fetch('/api/quiz', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-      })
-      if (!res.ok) {
-        const { error } = await res.json()
-        throw new Error(error ?? 'Failed to generate quiz')
-      }
-      const data = await res.json()
+      const data = await fetchAI<{ quiz: QuizQuestion[] }>('/api/quiz', { content })
       if (data.quiz && data.quiz.length > 0) {
         setQuizQuestions(data.quiz)
+        
+        await supabase.from('notes').update({
+          quiz_data: { questions: data.quiz }
+        }).eq('id', noteId)
+
         toast.success('Quiz generated!')
       } else {
-        throw new Error('No quiz questions returned')
+        throw new Error('Something went wrong. Try again.')
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error'
-      toast.error('Failed to generate quiz', { description: message })
+      toast.error('Something went wrong. Try again.')
     } finally {
       setIsQuizLoading(false)
     }
@@ -300,7 +302,7 @@ export default function NoteViewPage() {
     if (!note) return
     const content = (note.content as string | undefined) ?? ''
     if (!content) {
-      toast.error('No content available to generate a plan')
+      toast.error('Write something first to generate AI content')
       return
     }
 
@@ -314,16 +316,7 @@ export default function NoteViewPage() {
     setPlannerProgress({})
     
     try {
-      const res = await fetch('/api/planner', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, subject: plannerSubject, deadline: plannerDeadline }),
-      })
-      if (!res.ok) {
-        const { error } = await res.json()
-        throw new Error(error ?? 'Failed to generate plan')
-      }
-      const data = await res.json()
+      const data = await fetchAI<{ plan: StudyDay[] }>('/api/planner', { content, subject: plannerSubject, deadline: plannerDeadline })
       if (data.plan && data.plan.length > 0) {
         setPlannerDays(data.plan)
         await supabase.from('notes').update({
@@ -332,11 +325,10 @@ export default function NoteViewPage() {
         
         toast.success('Study plan generated and saved!')
       } else {
-        throw new Error('No study plan returned')
+        throw new Error('Something went wrong. Try again.')
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error'
-      toast.error('Failed to generate study plan', { description: message })
+      toast.error('Something went wrong. Try again.')
     } finally {
       setIsPlannerLoading(false)
     }
@@ -352,26 +344,16 @@ export default function NoteViewPage() {
     setChatInput('')
     setIsChatLoading(true)
     try {
-      const res = await fetch('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content,
-          fileUrl: publicUrl,
-          fileType: note?.file_type,
-          type: 'chat',
-          question,
-        }),
+      const { result } = await fetchAI<{ result: string }>('/api/ai', {
+        content,
+        fileUrl: publicUrl,
+        fileType: note?.file_type,
+        type: 'chat',
+        question,
       })
-      if (!res.ok) {
-        const { error } = (await res.json()) as { error?: string }
-        throw new Error(error ?? 'Failed to get a response')
-      }
-      const { result } = (await res.json()) as { result: string }
       setChatMessages((prev) => [...prev, { role: 'assistant', content: result }])
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error'
-      toast.error('AI Tutor failed to respond', { description: message })
+      toast.error('Something went wrong. Try again.')
       setChatMessages((prev) => prev.slice(0, -1))
     } finally {
       setIsChatLoading(false)
