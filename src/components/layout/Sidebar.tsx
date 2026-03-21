@@ -60,6 +60,28 @@ export function Sidebar() {
   }, [profileRef])
 
   useEffect(() => {
+    const checkUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        router.push("/login")
+      }
+    }
+    checkUser()
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (!session) {
+          router.push("/login")
+        }
+      }
+    )
+
+    return () => {
+      listener.subscription.unsubscribe()
+    }
+  }, [supabase, router])
+
+  useEffect(() => {
     const fetchSubjects = async () => {
       const { data, count } = await supabase
         .from('subjects')
@@ -115,8 +137,8 @@ export function Sidebar() {
   }, [supabase])
 
   const handleLogout = async () => {
-    toast.success('Logged out successfully')
-    router.push('/login')
+    await supabase.auth.signOut()
+    window.location.href = "/login"
   }
 
   const SidebarContent = (

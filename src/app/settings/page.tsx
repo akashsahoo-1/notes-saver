@@ -20,14 +20,16 @@ export default function SettingsPage() {
 
   // Initialization
   useEffect(() => {
-    async function loadData() {
+    const loadData = async () => {
       const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        router.push("/login")
+        return
+      }
+      
       if (user) {
         setEmail(user.email || '')
-        
-        // Try to fetch from profiles table first
         const { data: profile } = await supabase.from('profiles').select('name').eq('user_id', user.id).single()
-        
         if (profile?.name) {
           setName(profile.name)
         } else if (user.user_metadata?.name) {
@@ -37,7 +39,14 @@ export default function SettingsPage() {
     }
     loadData()
 
-    // Setup Dark Mode from localStorage
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (!session) {
+          router.push("/login")
+        }
+      }
+    )
+
     const savedTheme = localStorage.getItem('theme')
     const isDark = savedTheme === 'dark' || (!savedTheme && document.documentElement.classList.contains('dark'))
     setIsDarkMode(isDark)
@@ -46,12 +55,16 @@ export default function SettingsPage() {
     } else {
       document.documentElement.classList.remove('dark')
     }
-  }, [supabase])
+
+    return () => {
+      listener.subscription.unsubscribe()
+    }
+  }, [supabase, router])
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
     await supabase.auth.signOut()
-    router.push('/login')
+    window.location.href = "/login"
   }
 
   const toggleTheme = () => {

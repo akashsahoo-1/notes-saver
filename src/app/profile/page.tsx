@@ -16,9 +16,14 @@ export default function ProfilePage() {
   const [subjectsCount, setSubjectsCount] = useState(0)
 
   useEffect(() => {
-    async function fetchProfile() {
+    const fetchProfile = async () => {
       setIsLoading(true)
       const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        router.push("/login")
+        return
+      }
+
       if (user) {
         setUser(user)
         const { data: profile } = await supabase.from('profiles').select('name').eq('user_id', user.id).single()
@@ -38,7 +43,19 @@ export default function ProfilePage() {
       setIsLoading(false)
     }
     fetchProfile()
-  }, [supabase])
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (!session) {
+          router.push("/login")
+        }
+      }
+    )
+
+    return () => {
+      listener.subscription.unsubscribe()
+    }
+  }, [supabase, router])
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-[#0a0f1d] font-sans text-slate-900 dark:text-slate-50 relative overflow-x-hidden transition-colors duration-300">
