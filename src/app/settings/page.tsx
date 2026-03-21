@@ -1,20 +1,100 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, User, Mail, Moon, LogOut, Trash2, Shield, Loader2, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
+import { clsx } from 'clsx'
 
 export default function SettingsPage() {
   const router = useRouter()
   const supabase = createClient()
+  
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  
+  const [name, setName] = useState('Student User')
+  const [email, setEmail] = useState('')
+  const [isDarkMode, setIsDarkMode] = useState(true)
+
+  // Initialization
+  useEffect(() => {
+    async function loadData() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        setEmail(user.email || '')
+        
+        // Try to fetch from profiles table first
+        const { data: profile } = await supabase.from('profiles').select('full_name').eq('user_id', user.id).single()
+        
+        if (profile?.full_name) {
+          setName(profile.full_name)
+        } else if (user.user_metadata?.full_name) {
+          setName(user.user_metadata.full_name)
+        }
+      }
+    }
+    loadData()
+
+    // Setup Dark Mode from localStorage
+    const savedTheme = localStorage.getItem('theme')
+    const isDark = savedTheme === 'dark' || (!savedTheme && document.documentElement.classList.contains('dark'))
+    setIsDarkMode(isDark)
+    if (isDark) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [supabase])
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
     await supabase.auth.signOut()
     router.push('/login')
+  }
+
+  const toggleDarkMode = () => {
+    const next = !isDarkMode
+    setIsDarkMode(next)
+    if (next) {
+      document.documentElement.classList.add('dark')
+      localStorage.setItem('theme', 'dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+      localStorage.setItem('theme', 'light')
+    }
+  }
+
+  const handleSaveProfile = async () => {
+    if (!name.trim()) return toast.error('Name cannot be empty')
+    
+    setIsSaving(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not logged in')
+
+      // Upsert into profiles table exactly as requested
+      const { error: profileError } = await supabase.from('profiles').upsert({
+        user_id: user.id,
+        full_name: name.trim(),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id' })
+
+      // Fallback: If table doesn't exist, we still update auth state so UI works perfectly
+      await supabase.auth.updateUser({ data: { full_name: name.trim() } })
+
+      if (profileError && profileError.code !== '42P01') {
+        throw profileError
+      }
+
+      toast.success('Successfully updated profile!')
+      // Local state is already updated via naming component
+    } catch (err: any) {
+      toast.error('Failed to update profile', { description: err.message })
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -45,34 +125,41 @@ export default function SettingsPage() {
               <h2 className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-5 flex items-center gap-2">
                 <User className="h-4 w-4 text-purple-400" /> Account Data
               </h2>
-              <div className="bg-black/20 rounded-3xl border border-white/5 p-6 md:p-8 space-y-6 shadow-inner">
+              <div className="bg-black/20 rounded-3xl border border-white/5 p-6 md:p-8 space-y-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Display Name</label>
                   <div className="relative">
                     <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
                     <input 
                       type="text" 
-                      defaultValue="Student User"
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-12 pr-5 text-white placeholder:text-slate-600 focus:outline-none focus:border-purple-500/50 focus:ring-4 focus:ring-purple-500/10 transition-all font-medium"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-12 pr-5 text-white placeholder:text-slate-600 focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all font-medium"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Linked Email</label>
-                  <div className="relative">
+                  <div className="relative opacity-60 cursor-not-allowed">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
                     <input 
                       type="email" 
-                      defaultValue="student@example.com"
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-12 pr-5 text-white placeholder:text-slate-600 focus:outline-none focus:border-purple-500/50 focus:ring-4 focus:ring-purple-500/10 transition-all font-medium"
+                      value={email}
+                      readOnly
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-12 pr-5 text-white font-medium cursor-not-allowed pointer-events-none"
                     />
                   </div>
                 </div>
 
                 <div className="pt-2">
-                  <button onClick={() => toast.success('Profile configurations synchronized successfully.')} className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-[1rem] font-bold transition-all text-sm border border-white/10 shadow-sm flex items-center gap-2">
-                    <Sparkles className="h-4 w-4" /> Save Variations
+                  <button 
+                    onClick={handleSaveProfile} 
+                    disabled={isSaving}
+                    className="px-6 py-3 bg-white/10 hover:bg-white/20 hover:scale-105 active:scale-95 text-white rounded-[1rem] font-bold transition-all text-sm border border-white/10 shadow-sm flex items-center gap-2"
+                  >
+                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} 
+                    Save Variations
                   </button>
                 </div>
               </div>
@@ -83,18 +170,24 @@ export default function SettingsPage() {
               <h2 className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-5 flex items-center gap-2">
                 <Shield className="h-4 w-4 text-blue-400" /> Interface Preferences
               </h2>
-              <div className="bg-black/20 rounded-3xl border border-white/5 p-6 md:p-8 shadow-inner hover:border-white/10 transition-colors">
+              <div className="bg-black/20 rounded-3xl border border-white/5 p-6 md:p-8 shadow-[0_4px_20px_rgba(0,0,0,0.2)] hover:border-white/10 transition-colors">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className="p-3.5 bg-blue-500/10 rounded-2xl border border-blue-500/20 shadow-inner">
-                      <Moon className="h-5 w-5 text-blue-400" />
+                    <div className={clsx("p-3.5 rounded-2xl border shadow-inner transition-colors", isDarkMode ? "bg-blue-500/10 border-blue-500/20" : "bg-slate-500/10 border-slate-500/20")}>
+                      <Moon className={clsx("h-5 w-5 transition-colors", isDarkMode ? "text-blue-400" : "text-slate-400")} />
                     </div>
                     <div className="flex flex-col">
                       <h3 className="font-bold text-white text-[15px]">Dark App Mode</h3>
                       <p className="text-[11px] text-slate-400 font-medium tracking-wide">Interface defaults to Dribbble styling.</p>
                     </div>
                   </div>
-                  <div className="w-14 h-7 bg-blue-500 rounded-full flex items-center p-1 cursor-not-allowed justify-end shadow-[0_0_15px_rgba(59,130,246,0.4)] opacity-90 transition-all border border-blue-400/50 shadow-inner">
+                  <div 
+                    onClick={toggleDarkMode}
+                    className={clsx(
+                      "w-14 h-7 rounded-full flex items-center p-1 cursor-pointer transition-all border shadow-inner",
+                      isDarkMode ? "bg-blue-500 border-blue-400/50 justify-end shadow-[0_0_15px_rgba(59,130,246,0.4)]" : "bg-slate-700 border-slate-600 justify-start"
+                    )}
+                  >
                     <div className="bg-white w-5 h-5 rounded-full shadow-sm"></div>
                   </div>
                 </div>
@@ -106,12 +199,12 @@ export default function SettingsPage() {
               <h2 className="text-[11px] font-black uppercase tracking-widest text-red-500/80 mb-5 flex items-center gap-2">
                 <Trash2 className="h-4 w-4" /> Danger Authorization
               </h2>
-              <div className="bg-red-500/5 rounded-3xl border border-red-500/10 p-6 md:p-8 flex flex-col gap-5 shadow-inner">
+              <div className="bg-red-500/5 rounded-3xl border border-red-500/10 p-6 md:p-8 flex flex-col gap-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
                 
                 <button 
                   onClick={handleLogout}
                   disabled={isLoggingOut}
-                  className="w-full flex items-center justify-between p-4 px-5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all group shadow-sm text-left"
+                  className="w-full flex items-center justify-between p-4 px-5 rounded-2xl bg-white/5 hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98] border border-white/5 transition-all group shadow-sm text-left"
                 >
                   <div className="flex items-center gap-4">
                     <div className="p-2 bg-slate-500/10 rounded-lg group-hover:bg-slate-500/20 transition-colors">
@@ -123,8 +216,8 @@ export default function SettingsPage() {
                 </button>
 
                 <button 
-                  onClick={() => toast.error('Account deletion disabled due to active Pro Plan safeguards.')}
-                  className="w-full flex items-center justify-between p-4 px-5 rounded-2xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-all group shadow-sm text-left"
+                  onClick={() => toast.error('Account deletion disabled manually.')}
+                  className="w-full flex items-center justify-between p-4 px-5 rounded-2xl bg-red-500/10 hover:bg-red-500/20 hover:scale-[1.02] active:scale-[0.98] border border-red-500/20 transition-all group shadow-sm text-left"
                 >
                   <div className="flex items-center gap-4">
                     <div className="p-2 bg-red-500/10 rounded-lg group-hover:bg-red-500/30 transition-colors">

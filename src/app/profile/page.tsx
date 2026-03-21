@@ -11,6 +11,7 @@ export default function ProfilePage() {
   const supabase = createClient()
   const [isLoading, setIsLoading] = useState(true)
   const [user, setUser] = useState<any>(null)
+  const [profileName, setProfileName] = useState('Student User')
   const [notesCount, setNotesCount] = useState(0)
   const [subjectsCount, setSubjectsCount] = useState(0)
 
@@ -18,7 +19,15 @@ export default function ProfilePage() {
     async function fetchProfile() {
       setIsLoading(true)
       const { data: { user } } = await supabase.auth.getUser()
-      if (user) setUser(user)
+      if (user) {
+        setUser(user)
+        const { data: profile } = await supabase.from('profiles').select('full_name').eq('user_id', user.id).single()
+        if (profile?.full_name) {
+          setProfileName(profile.full_name)
+        } else if (user.user_metadata?.full_name) {
+          setProfileName(user.user_metadata.full_name)
+        }
+      }
 
       const { count: nQty } = await supabase.from('notes').select('*', { count: 'exact', head: true })
       if (nQty !== null) setNotesCount(nQty)
@@ -72,40 +81,31 @@ export default function ProfilePage() {
               </div>
 
               {/* Basic Info */}
-              <h2 className="text-3xl font-black text-white mb-2 tracking-tight drop-shadow-md">{user?.user_metadata?.full_name || 'Student User'}</h2>
+              <h2 className="text-3xl font-black text-white mb-2 tracking-tight drop-shadow-md">{profileName}</h2>
               <div className="flex items-center gap-2 text-slate-300 mb-10 bg-white/5 px-5 py-2 rounded-full border border-white/10 shadow-inner">
                 <Mail className="h-4 w-4 text-pink-400" />
                 <span className="text-[13px] font-bold tracking-wide">{user?.email || 'student@example.com'}</span>
               </div>
 
               {/* Stats Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full">
-                {/* Account Type */}
-                <div className="flex flex-col items-center p-6 bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-white/10 rounded-[1.5rem] shadow-[0_10px_30px_rgba(0,0,0,0.2)] hover:border-blue-500/30 transition-all duration-300 group">
-                  <div className="mb-4 p-3.5 bg-blue-500/20 rounded-2xl shadow-[0_0_15px_rgba(59,130,246,0.3)] group-hover:scale-110 transition-transform duration-300">
-                    <CreditCard className="h-6 w-6 text-blue-400" />
-                  </div>
-                  <span className="text-2xl font-black text-white mb-1">Pro Plan</span>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Account Type</span>
-                </div>
-
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 w-full max-w-lg mb-4">
                 {/* Notes */}
-                <div className="flex flex-col items-center p-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-white/10 rounded-[1.5rem] shadow-[0_10px_30px_rgba(0,0,0,0.2)] hover:border-purple-500/30 transition-all duration-300 group">
+                <Link href="/dashboard/notes" className="flex flex-col items-center p-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-white/10 rounded-[1.5rem] shadow-[0_10px_30px_rgba(0,0,0,0.2)] hover:border-purple-500/30 transition-all duration-300 group hover:scale-[1.03] active:scale-[0.97] cursor-pointer">
                   <div className="mb-4 p-3.5 bg-purple-500/20 rounded-2xl shadow-[0_0_15px_rgba(168,85,247,0.3)] group-hover:scale-110 transition-transform duration-300">
                     <FileText className="h-6 w-6 text-purple-400" />
                   </div>
-                  <span className="text-2xl font-black text-white mb-1">{notesCount}</span>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Notes</span>
-                </div>
+                  <span className="text-3xl font-black text-white mb-1 group-hover:text-purple-300 transition-colors">{notesCount}</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-purple-300/80 transition-colors">Total Notes</span>
+                </Link>
 
                 {/* Subjects */}
-                <div className="flex flex-col items-center p-6 bg-gradient-to-br from-pink-500/10 to-orange-400/10 border border-white/10 rounded-[1.5rem] shadow-[0_10px_30px_rgba(0,0,0,0.2)] hover:border-pink-500/30 transition-all duration-300 group">
+                <Link href="/dashboard/subjects" className="flex flex-col items-center p-6 bg-gradient-to-br from-pink-500/10 to-orange-400/10 border border-white/10 rounded-[1.5rem] shadow-[0_10px_30px_rgba(0,0,0,0.2)] hover:border-pink-500/30 transition-all duration-300 group hover:scale-[1.03] active:scale-[0.97] cursor-pointer">
                   <div className="mb-4 p-3.5 bg-pink-500/20 rounded-2xl shadow-[0_0_15px_rgba(244,114,182,0.3)] group-hover:scale-110 transition-transform duration-300">
                     <FolderClosed className="h-6 w-6 text-pink-400" />
                   </div>
-                  <span className="text-2xl font-black text-white mb-1">{subjectsCount}</span>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Subjects</span>
-                </div>
+                  <span className="text-3xl font-black text-white mb-1 group-hover:text-pink-300 transition-colors">{subjectsCount}</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-pink-300/80 transition-colors">Subjects</span>
+                </Link>
               </div>
 
               {/* Action Button */}

@@ -42,6 +42,7 @@ export function Sidebar() {
   const [favoriteNotes, setFavoriteNotes] = useState<FavoriteNote[]>([])
   const [notesCount, setNotesCount] = useState(0)
   const [subjectsCount, setSubjectsCount] = useState(0)
+  const [user, setUser] = useState<any>(null)
 
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const profileRef = useRef<HTMLDivElement>(null)
@@ -84,9 +85,21 @@ export function Sidebar() {
       if (count !== null) setNotesCount(count)
     }
 
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        setUser(user)
+        const { data: profile } = await supabase.from('profiles').select('full_name').eq('user_id', user.id).single()
+        if (profile?.full_name) {
+          setUser({ ...user, user_metadata: { ...user.user_metadata, full_name: profile.full_name } })
+        }
+      }
+    }
+
     fetchSubjects()
     fetchFavorites()
     fetchNotesCount()
+    fetchUser()
 
     const channels = supabase.channel('custom-all-channel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'subjects' }, fetchSubjects)
@@ -210,8 +223,8 @@ export function Sidebar() {
             <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-400 border-2 border-[#0a0f1d]" />
           </div>
           <div className="flex flex-col overflow-hidden">
-            <span className="text-[15px] font-bold text-white truncate group-hover:text-purple-300 transition-colors">Student User</span>
-            <span className="text-xs text-slate-400 font-medium truncate tracking-wide">Pro Account</span>
+            <span className="text-[15px] font-bold text-white truncate group-hover:text-purple-300 transition-colors">{user?.user_metadata?.full_name || 'Student User'}</span>
+            <span className="text-xs text-slate-400 font-medium truncate tracking-wide">Student Account</span>
           </div>
         </div>
 
