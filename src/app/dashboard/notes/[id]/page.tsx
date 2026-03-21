@@ -21,7 +21,12 @@ import {
   Send,
   RotateCcw,
   Star,
-  Zap
+  Zap,
+  HelpCircle,
+  CheckCircle,
+  XCircle,
+  CalendarDays,
+  Calendar
 } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -34,7 +39,18 @@ const BUCKET = "notes-files";
 // Types
 // ---------------------------------------------------------------------------
 
-type TabId = 'content' | 'summary' | 'concepts' | 'exam' | 'flashcards' | 'chat'
+type TabId = 'content' | 'summary' | 'concepts' | 'exam' | 'flashcards' | 'quiz' | 'planner' | 'chat'
+
+interface QuizQuestion {
+  question: string
+  options: string[]
+  answer: string
+}
+
+interface StudyDay {
+  day: string
+  topics: string[]
+}
 
 interface Flashcard {
   q: string
@@ -97,6 +113,19 @@ export default function NoteViewPage() {
   const [isChatLoading, setIsChatLoading] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
+  // Quiz
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([])
+  const [quizAnswers, setQuizAnswers] = useState<Record<number, string>>({})
+  const [isQuizSubmitted, setIsQuizSubmitted] = useState(false)
+  const [isQuizLoading, setIsQuizLoading] = useState(false)
+
+  // Planner
+  const [plannerDays, setPlannerDays] = useState<StudyDay[]>([])
+  const [plannerProgress, setPlannerProgress] = useState<Record<string, boolean>>({})
+  const [plannerSubject, setPlannerSubject] = useState('')
+  const [plannerDeadline, setPlannerDeadline] = useState('7')
+  const [isPlannerLoading, setIsPlannerLoading] = useState(false)
+
   // ── Fetch note ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!noteId) return
@@ -114,6 +143,12 @@ export default function NoteViewPage() {
         return
       }
       setNote(noteData as Record<string, unknown>)
+
+      const rawPlan = (noteData as Record<string, any>).study_plan;
+      if (rawPlan) {
+        setPlannerDays(rawPlan.days || [])
+        setPlannerProgress(rawPlan.progress || {})
+      }
 
       const { data: subData } = await supabase
         .from('subjects')
@@ -210,6 +245,100 @@ export default function NoteViewPage() {
       toast.error(`Failed to generate ${feature}`, { description: message })
     } finally {
       setIsAiLoading((prev) => ({ ...prev, [feature]: false }))
+    }
+  }
+
+  // ── Quiz ──────────────────────────────────────────────────────────────────
+  const handleGenerateQuiz = async () => {
+    if (!note) return
+    const content = (note.content as string | undefined) ?? ''
+    if (!content) {
+      toast.error('No content available to generate a quiz')
+      return
+    }
+
+    setIsQuizLoading(true)
+    setIsQuizSubmitted(false)
+    setQuizAnswers({})
+    setQuizQuestions([])
+    
+    try {
+      const res = await fetch('/api/quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      })
+      if (!res.ok) {
+        const { error } = await res.json()
+        throw new Error(error ?? 'Failed to generate quiz')
+      }
+      const data = await res.json()
+      if (data.quiz && data.quiz.length > 0) {
+        setQuizQuestions(data.quiz)
+        toast.success('Quiz generated!')
+      } else {
+        throw new Error('No quiz questions returned')
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      toast.error('Failed to generate quiz', { description: message })
+    } finally {
+      setIsQuizLoading(false)
+    }
+  }
+
+  // ── Planner ───────────────────────────────────────────────────────────────
+  const savePlannerProgress = async (newProgress: Record<string, boolean>) => {
+    setPlannerProgress(newProgress)
+    const { error } = await supabase.from('notes').update({
+      study_plan: { days: plannerDays, progress: newProgress }
+    }).eq('id', noteId)
+    if(error) console.error("Failed to save plan progress to DB", error)
+  }
+
+  const handleGeneratePlanner = async () => {
+    if (!note) return
+    const content = (note.content as string | undefined) ?? ''
+    if (!content) {
+      toast.error('No content available to generate a plan')
+      return
+    }
+
+    if (!plannerSubject || !plannerDeadline) {
+      toast.error('Please fill in both Subject and Deadline.')
+      return
+    }
+
+    setIsPlannerLoading(true)
+    setPlannerDays([])
+    setPlannerProgress({})
+    
+    try {
+      const res = await fetch('/api/planner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, subject: plannerSubject, deadline: plannerDeadline }),
+      })
+      if (!res.ok) {
+        const { error } = await res.json()
+        throw new Error(error ?? 'Failed to generate plan')
+      }
+      const data = await res.json()
+      if (data.plan && data.plan.length > 0) {
+        setPlannerDays(data.plan)
+        await supabase.from('notes').update({
+          study_plan: { days: data.plan, progress: {} }
+        }).eq('id', noteId)
+        
+        toast.success('Study plan generated and saved!')
+      } else {
+        throw new Error('No study plan returned')
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      toast.error('Failed to generate study plan', { description: message })
+    } finally {
+      setIsPlannerLoading(false)
     }
   }
 
@@ -339,6 +468,8 @@ export default function NoteViewPage() {
             <AiTab label="Key Concepts" id="concepts"   icon={List}          active={activeTab === 'concepts'}   onClick={() => setActiveTab('concepts')} />
             <AiTab label="Exam Prep"    id="exam"       icon={Brain}         active={activeTab === 'exam'}       onClick={() => setActiveTab('exam')} />
             <AiTab label="Flashcards"   id="flashcards" icon={CreditCard}    active={activeTab === 'flashcards'} onClick={() => setActiveTab('flashcards')} />
+            <AiTab label="Quiz"         id="quiz"       icon={HelpCircle}    active={activeTab === 'quiz'}       onClick={() => setActiveTab('quiz')} />
+            <AiTab label="Study Planner" id="planner"   icon={CalendarDays}  active={activeTab === 'planner'}    onClick={() => setActiveTab('planner')} />
             <AiTab label="AI Tutor"     id="chat"       icon={MessageSquare} active={activeTab === 'chat'}       onClick={() => setActiveTab('chat')} />
           </div>
 
@@ -428,6 +559,190 @@ export default function NoteViewPage() {
                           ))}
                         </div>
                       )}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              {/* Quiz */}
+              {activeTab === 'quiz' && (
+                <motion.div key="quiz" {...tabAnim} className="flex flex-col h-full w-full p-6 md:p-8">
+                  {quizQuestions.length === 0 && !isQuizLoading ? (
+                    <AIEmptyState tab="quiz" onGenerate={handleGenerateQuiz} />
+                  ) : isQuizLoading ? (
+                    <AILoadingState tabName="quiz" />
+                  ) : (
+                    <div className="flex flex-col gap-6 relative z-10 w-full max-w-3xl mx-auto pb-8">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-cyan-400 rounded-xl shadow-[0_0_15px_rgba(99,102,241,0.4)]">
+                            <HelpCircle className="h-5 w-5 text-white" />
+                          </div>
+                          <div>
+                            <h2 className="text-2xl font-black text-white tracking-tight drop-shadow-md">Smart Quiz</h2>
+                            {isQuizSubmitted && (
+                               <p className="text-xs text-indigo-300 font-bold tracking-widest uppercase mt-1">
+                                 Score: {Object.keys(quizAnswers).filter(i => quizAnswers[Number(i)] === quizQuestions[Number(i)].answer).length} / {quizQuestions.length}
+                               </p>
+                            )}
+                          </div>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={handleGenerateQuiz} className="gap-2 text-xs h-10 px-4 rounded-xl border-white/10 bg-white/5 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.1)] text-white transition-all font-bold">
+                          <RotateCcw className="h-4 w-4" /> <span className="hidden sm:inline">Regenerate</span>
+                        </Button>
+                      </div>
+
+                      <div className="flex flex-col gap-5">
+                        {quizQuestions.map((q, i) => (
+                          <div key={i} className="bg-white/5 backdrop-blur-md rounded-2xl p-6 border border-white/10 shadow-lg">
+                            <h3 className="text-[17px] font-bold text-white mb-4 leading-relaxed">{i + 1}. {q.question}</h3>
+                            <div className="flex flex-col gap-3">
+                              {q.options.map((opt, j) => {
+                                const isSelected = quizAnswers[i] === opt;
+                                const isCorrect = q.answer === opt;
+                                const showCorrect = isQuizSubmitted && isCorrect;
+                                const showWrong = isQuizSubmitted && isSelected && !isCorrect;
+                                
+                                return (
+                                  <button
+                                    key={j}
+                                    onClick={() => !isQuizSubmitted && setQuizAnswers(prev => ({...prev, [i]: opt}))}
+                                    disabled={isQuizSubmitted}
+                                    className={clsx(
+                                      "text-left px-5 py-4 rounded-xl border transition-all duration-200 font-medium text-[15px] flex items-center justify-between group",
+                                      showCorrect ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.2)]" :
+                                      showWrong ? "bg-red-500/20 border-red-500/50 text-red-200" :
+                                      isSelected ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-200" :
+                                      "bg-black/20 border-white/10 text-slate-300 hover:bg-white/10 hover:border-white/20"
+                                    )}
+                                  >
+                                    <span>{opt}</span>
+                                    {showCorrect && <CheckCircle className="h-5 w-5 text-emerald-400 shrink-0 ml-3" />}
+                                    {showWrong && <XCircle className="h-5 w-5 text-red-400 shrink-0 ml-3" />}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {!isQuizSubmitted && quizQuestions.length > 0 && (
+                        <Button 
+                          onClick={() => setIsQuizSubmitted(true)}
+                          disabled={Object.keys(quizAnswers).length < quizQuestions.length}
+                          className="w-full h-14 mt-4 rounded-2xl bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white font-black text-lg shadow-[0_5px_20px_rgba(99,102,241,0.4)] transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed border-0"
+                        >
+                          Submit Answers
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              {/* Planner */}
+              {activeTab === 'planner' && (
+                <motion.div key="planner" {...tabAnim} className="flex flex-col h-full w-full p-6 md:p-8 overflow-y-auto custom-scrollbar">
+                  {!isPlannerLoading && plannerDays.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center flex-1 text-center py-16 px-8 rounded-[2rem] border border-white/10 border-dashed bg-white/5 backdrop-blur-xl shadow-lg relative overflow-hidden w-full max-w-2xl mx-auto">
+                      <div className="p-5 bg-gradient-to-br from-teal-500/20 to-emerald-500/20 rounded-3xl mb-6 border border-teal-500/30">
+                        <CalendarDays className="h-10 w-10 text-teal-300" />
+                      </div>
+                      <h3 className="text-2xl font-black text-white mb-3 tracking-tight drop-shadow-md">AI Study Planner</h3>
+                      <p className="text-slate-300 mb-8 max-w-md leading-relaxed font-medium">
+                        Set your subject and deadline, and let the AI generate a day-wise timeline to master this content.
+                      </p>
+                      
+                      <div className="w-full max-w-sm flex flex-col gap-4 mb-8">
+                        <div className="flex flex-col text-left gap-1.5">
+                          <label className="text-xs font-bold tracking-widest uppercase text-slate-400">Subject Goal</label>
+                          <input 
+                            type="text" 
+                            value={plannerSubject} 
+                            onChange={e => setPlannerSubject(e.target.value)} 
+                            placeholder="e.g. Master Calculus" 
+                            className="bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-teal-500/50 outline-none w-full shadow-inner"
+                          />
+                        </div>
+                        <div className="flex flex-col text-left gap-1.5">
+                          <label className="text-xs font-bold tracking-widest uppercase text-slate-400">Deadline (Days)</label>
+                          <input 
+                            type="number" 
+                            min="1"
+                            max="60"
+                            value={plannerDeadline} 
+                            onChange={e => setPlannerDeadline(e.target.value)} 
+                            className="bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-teal-500/50 outline-none w-full shadow-inner"
+                          />
+                        </div>
+                      </div>
+
+                      <Button onClick={handleGeneratePlanner} className="gap-3 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-white rounded-xl shadow-[0_0_20px_rgba(20,184,166,0.5)] px-8 py-6 text-[15px] font-bold border-0 hover:scale-105 active:scale-95 transition-all w-full max-w-sm">
+                        <Calendar className="h-5 w-5" /> Generate My Plan
+                      </Button>
+                    </div>
+                  ) : isPlannerLoading ? (
+                    <AILoadingState tabName="planner" />
+                  ) : (
+                    <div className="flex flex-col gap-8 relative z-10 w-full max-w-3xl mx-auto pb-8">
+                       <div className="flex items-center justify-between">
+                         <div className="flex items-center gap-3">
+                           <div className="p-2.5 bg-gradient-to-br from-teal-500 to-emerald-500 rounded-xl shadow-[0_0_15px_rgba(20,184,166,0.4)]">
+                             <CalendarDays className="h-5 w-5 text-white" />
+                           </div>
+                           <h2 className="text-2xl font-black text-white tracking-tight drop-shadow-md">Study Plan</h2>
+                         </div>
+                         <Button variant="outline" size="sm" onClick={() => { setPlannerDays([]); setPlannerProgress({}) }} className="gap-2 text-xs h-10 px-4 rounded-xl border-white/10 bg-white/5 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.1)] text-white transition-all font-bold">
+                           <RotateCcw className="h-4 w-4" /> <span className="hidden sm:inline">New Plan</span>
+                         </Button>
+                       </div>
+                       
+                       {/* Progress Bar */}
+                       <div className="bg-white/5 rounded-2xl p-5 border border-white/10 shadow-lg">
+                          <div className="flex justify-between text-sm font-bold text-slate-300 mb-2">
+                             <span>Overall Progress</span>
+                             <span>{Math.round((Object.values(plannerProgress).filter(Boolean).length / (plannerDays.reduce((acc, current) => acc + current.topics.length, 0) || 1)) * 100)}%</span>
+                          </div>
+                          <div className="h-3 w-full bg-black/40 rounded-full overflow-hidden shadow-inner flex relative">
+                             <div 
+                               className="h-full bg-gradient-to-r from-teal-400 to-emerald-400 transition-all duration-500"
+                               style={{ width: `${(Object.values(plannerProgress).filter(Boolean).length / (plannerDays.reduce((acc, current) => acc + current.topics.length, 0) || 1)) * 100}%` }}
+                             />
+                          </div>
+                       </div>
+
+                       {/* Timeline Items */}
+                       <div className="flex flex-col gap-6 w-full">
+                         {plannerDays.map((pDay, dIndex) => (
+                           <div key={dIndex} className="bg-white/5 border border-white/10 rounded-2xl p-6 shadow-md relative overflow-hidden group">
+                             <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-teal-500 to-emerald-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                             <h4 className="text-lg font-black text-white mb-4 pl-2 tracking-wide text-teal-300">{pDay.day}</h4>
+                             <div className="flex flex-col gap-3 pl-2">
+                               {pDay.topics.map((topic, tIndex) => {
+                                  const topicKey = `${dIndex}-${tIndex}`;
+                                  const isChecked = plannerProgress[topicKey] || false;
+                                  return (
+                                     <label key={tIndex} className="flex items-start gap-4 cursor-pointer group/item hover:bg-white/5 p-2 rounded-xl transition-colors -ml-2">
+                                        <div className="relative flex items-center justify-center shrink-0 mt-0.5 ml-2">
+                                           <input 
+                                             type="checkbox" 
+                                             checked={isChecked}
+                                             onChange={(e) => savePlannerProgress({...plannerProgress, [topicKey]: e.target.checked})}
+                                             className="appearance-none w-5 h-5 border-2 border-white/20 rounded bg-black/20 checked:bg-teal-500 checked:border-teal-500 transition-all cursor-pointer peer shadow-inner hover:border-teal-400"
+                                           />
+                                           <CheckCircle className="absolute h-3 w-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" />
+                                        </div>
+                                        <span className={clsx("text-[15px] font-medium transition-all duration-200 mt-px select-none leading-snug w-full pr-2", isChecked ? "text-slate-500 line-through" : "text-slate-200 group-hover/item:text-teal-200")}>
+                                           {topic}
+                                        </span>
+                                     </label>
+                                  )
+                               })}
+                             </div>
+                           </div>
+                         ))}
+                       </div>
                     </div>
                   )}
                 </motion.div>
@@ -637,6 +952,8 @@ const AI_TAB_LABELS: Record<string, string> = {
   concepts:   'Core Concepts',
   exam:       'Simulation',
   flashcards: 'Flashcards',
+  quiz:       'Smart Quiz',
+  planner:    'Study Planner',
 }
 
 function AIEmptyState({ tab, onGenerate }: { tab: string; onGenerate: () => void }) {
