@@ -12,6 +12,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 
+const BUCKET = "notes-files";
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const ACCEPTED_FILE_TYPES = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png']
 
@@ -104,20 +105,28 @@ export default function EditNotePage() {
       const userId = "anonymous"
       let finalFilePath = existingFile ? existingFile.path : null
       let finalFileType = null // We don't have this easily available for existing, handled in logic
+      let finalFileUrl = null
 
+      // Since the new API uploads to 'notes-files', let's use that consistently
+      // Or we can just keep 'notes-attachments' and generate public URL from it.
       if (file) {
         const fileExt = file.name.split('.').pop()
         const fileName = `${crypto.randomUUID()}.${fileExt}`
         const storagePath = `users/${userId}/${noteId}/${fileName}`
         
         const { error: uploadError } = await supabase.storage
-          .from('notes-attachments')
+          .from(BUCKET)
           .upload(storagePath, file)
 
         if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`)
         
+        const { data: publicUrlData } = supabase.storage
+          .from(BUCKET)
+          .getPublicUrl(storagePath)
+
         finalFilePath = storagePath
         finalFileType = file.type
+        finalFileUrl = publicUrlData.publicUrl
       }
 
       // Prepare update object. If replacing/removing file, update file_path too.
@@ -128,10 +137,14 @@ export default function EditNotePage() {
         updated_at: new Date().toISOString()
       }
 
-      if (!existingFile && !file) updatePayload.file_path = null
+      if (!existingFile && !file) {
+        updatePayload.file_path = null
+        updatePayload.file_url = null
+      }
       if (file) {
         updatePayload.file_path = finalFilePath
         updatePayload.file_type = finalFileType
+        updatePayload.file_url = finalFileUrl
       }
 
       const { error: updateError } = await supabase.from('notes').update(updatePayload).eq('id', noteId)

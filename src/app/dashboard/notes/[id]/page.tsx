@@ -27,6 +27,8 @@ import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import { clsx } from 'clsx'
 
+const BUCKET = "notes-files";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -72,7 +74,7 @@ export default function NoteViewPage() {
   // Note data
   const [note, setNote] = useState<Record<string, unknown> | null>(null)
   const [subject, setSubject] = useState<Record<string, unknown> | null>(null)
-  const [signedUrl, setSignedUrl] = useState<string | null>(null)
+  const [publicUrl, setPublicUrl] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isFavoriting, setIsFavoriting] = useState(false)
@@ -118,15 +120,14 @@ export default function NoteViewPage() {
         .single()
       if (subData) setSubject(subData as Record<string, unknown>)
 
-      if ((noteData as Record<string, unknown>).file_path) {
-        const { data: urlData, error: urlError } = await supabase.storage
-          .from('notes-attachments')
-          .createSignedUrl(
-            (noteData as Record<string, unknown>).file_path as string,
-            3600
-          )
-        if (!urlError && urlData) setSignedUrl(urlData.signedUrl)
-        else toast.error('Failed to load attachment preview')
+      if ((noteData as Record<string, unknown>).file_url) {
+        setPublicUrl((noteData as Record<string, unknown>).file_url as string)
+      } else if ((noteData as Record<string, unknown>).file_path) {
+        // Fallback for older notes without file_url
+        const { data: urlData } = supabase.storage
+          .from(BUCKET)
+          .getPublicUrl((noteData as Record<string, unknown>).file_path as string)
+        if (urlData) setPublicUrl(urlData.publicUrl)
       }
       setIsLoading(false)
     }
@@ -145,7 +146,7 @@ export default function NoteViewPage() {
     if (!note) return
     const filePath = note.file_path as string | undefined
     if (filePath) {
-      await supabase.storage.from('notes-attachments').remove([filePath])
+      await supabase.storage.from(BUCKET).remove([filePath])
     }
     const { error } = await supabase.from('notes').delete().eq('id', noteId)
     if (error) {
@@ -193,7 +194,7 @@ export default function NoteViewPage() {
       const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, fileUrl: signedUrl, fileType, type: feature }),
+        body: JSON.stringify({ content, fileUrl: publicUrl, fileType, type: feature }),
       })
       if (!res.ok) {
         const { error } = (await res.json()) as { error?: string }
@@ -226,7 +227,7 @@ export default function NoteViewPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content,
-          fileUrl: signedUrl,
+          fileUrl: publicUrl,
           fileType: note?.file_type,
           type: 'chat',
           question,
@@ -476,7 +477,7 @@ export default function NoteViewPage() {
 
 
 
-              <a href={signedUrl ?? '#'} target="_blank" rel="noopener noreferrer" download={filePath.split('/').pop()} className="shrink-0">
+              <a href={publicUrl ?? '#'} target="_blank" rel="noopener noreferrer" download={filePath.split('/').pop()} className="shrink-0">
                 <Button variant="ghost" size="sm" className="h-8 gap-2 text-zinc-400 hover:text-white">
                   <Download className="h-3.5 w-3.5" />
                   <span className="text-xs">Download</span>
@@ -487,16 +488,16 @@ export default function NoteViewPage() {
             {/* PDF / image viewer */}
             <div className="flex flex-col flex-1 overflow-hidden pt-[49px]">
               <div className="flex-1 overflow-hidden">
-                {signedUrl ? (
+                {publicUrl ? (
                   fileType?.includes('pdf') ? (
                     <iframe
-                      src={`${signedUrl}#toolbar=0`}
+                      src={`${publicUrl}#toolbar=0`}
                       className="w-full h-full border-none bg-zinc-900"
                       title="PDF Viewer"
                     />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center p-8 bg-black">
-                      <img src={signedUrl} alt="Attachment Preview" className="max-h-full max-w-full object-contain rounded-md shadow-2xl" />
+                      <img src={publicUrl} alt="Attachment Preview" className="max-h-full max-w-full object-contain rounded-md shadow-2xl" />
                     </div>
                   )
                 ) : (

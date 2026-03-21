@@ -176,18 +176,6 @@ export function Sidebar() {
           )}
         </div>
       </div>
-
-      {/* Logout */}
-      <div className="p-4 border-t border-zinc-900 shrink-0">
-        <Button
-          variant="ghost"
-          onClick={handleLogout}
-          className="w-full justify-start gap-3 px-2 text-zinc-400 hover:text-red-400 hover:bg-red-400/10"
-        >
-          <LogOut className="h-4 w-4" />
-          <span>Log out</span>
-        </Button>
-      </div>
     </div>
   )
 

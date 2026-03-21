@@ -77,6 +77,9 @@ export default function CreateNotePage() {
         formData.append('file', file)
         formData.append('title', data.title)
         formData.append('subject_id', data.subject_id)
+        if (data.content) {
+          formData.append('content', data.content)
+        }
 
         const res = await fetch('/api/process-file', {
           method: 'POST',

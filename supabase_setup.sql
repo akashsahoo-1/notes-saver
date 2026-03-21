@@ -4,18 +4,40 @@
 -- 1. Enable pgcrypto for UUID generation if not already enabled
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 2. Create subjects table
+-- 2. Drop existing policies to prevent conflicts
+DROP POLICY IF EXISTS "Users can view their own subjects" ON subjects;
+DROP POLICY IF EXISTS "Users can create their own subjects" ON subjects;
+DROP POLICY IF EXISTS "Users can update their own subjects" ON subjects;
+DROP POLICY IF EXISTS "Users can delete their own subjects" ON subjects;
+
+DROP POLICY IF EXISTS "Users can view their own notes" ON notes;
+DROP POLICY IF EXISTS "Users can create their own notes" ON notes;
+DROP POLICY IF EXISTS "Users can update their own notes" ON notes;
+DROP POLICY IF EXISTS "Users can delete their own notes" ON notes;
+
+DROP POLICY IF EXISTS "Users can view their own files" ON storage.objects;
+DROP POLICY IF EXISTS "Users can upload files to their folder" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update their own files" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their own files" ON storage.objects;
+
+-- 3. Create or Update subjects table
 CREATE TABLE IF NOT EXISTS subjects (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 3. Create notes table
+-- Remove user_id if it exists
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='subjects' AND column_name='user_id') THEN
+        ALTER TABLE subjects DROP COLUMN user_id CASCADE;
+    END IF;
+END $$;
+
+-- 4. Create or Update notes table
 CREATE TABLE IF NOT EXISTS notes (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     content TEXT NOT NULL,
@@ -26,67 +48,38 @@ CREATE TABLE IF NOT EXISTS notes (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 4. Enable Row Level Security (RLS)
+-- Remove user_id if it exists
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='notes' AND column_name='user_id') THEN
+        ALTER TABLE notes DROP COLUMN user_id CASCADE;
+    END IF;
+END $$;
+
+-- 5. Enable Row Level Security (RLS) but allow public access temporarily
 ALTER TABLE subjects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
 
--- 5. Subjects Policies
-CREATE POLICY "Users can view their own subjects" 
-ON subjects FOR SELECT 
-USING (auth.uid() = user_id);
+-- 6. Public Subjects Policies (Temporary Auth Removal)
+CREATE POLICY "Public can view subjects" ON subjects FOR SELECT USING (true);
+CREATE POLICY "Public can create subjects" ON subjects FOR INSERT WITH CHECK (true);
+CREATE POLICY "Public can update subjects" ON subjects FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Public can delete subjects" ON subjects FOR DELETE USING (true);
 
-CREATE POLICY "Users can create their own subjects" 
-ON subjects FOR INSERT 
-WITH CHECK (auth.uid() = user_id);
+-- 7. Public Notes Policies (Temporary Auth Removal)
+CREATE POLICY "Public can view notes" ON notes FOR SELECT USING (true);
+CREATE POLICY "Public can create notes" ON notes FOR INSERT WITH CHECK (true);
+CREATE POLICY "Public can update notes" ON notes FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Public can delete notes" ON notes FOR DELETE USING (true);
 
-CREATE POLICY "Users can update their own subjects" 
-ON subjects FOR UPDATE 
-USING (auth.uid() = user_id) 
-WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can delete their own subjects" 
-ON subjects FOR DELETE 
-USING (auth.uid() = user_id);
-
--- 6. Notes Policies
-CREATE POLICY "Users can view their own notes" 
-ON notes FOR SELECT 
-USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can create their own notes" 
-ON notes FOR INSERT 
-WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update their own notes" 
-ON notes FOR UPDATE 
-USING (auth.uid() = user_id) 
-WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can delete their own notes" 
-ON notes FOR DELETE 
-USING (auth.uid() = user_id);
-
--- 7. Setup Storage bucket for attachments
+-- 8. Setup Storage bucket for attachments
 INSERT INTO storage.buckets (id, name, public) 
-VALUES ('notes-attachments', 'notes-attachments', false)
-ON CONFLICT (id) DO NOTHING;
+VALUES ('notes-files', 'notes-files', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
 
--- 8. Storage bucket policies (User can only access their own folder: users/{user_id}/*)
-CREATE POLICY "Users can view their own files" 
-ON storage.objects FOR SELECT 
-USING (bucket_id = 'notes-attachments' AND auth.uid()::text = (storage.foldername(name))[2]);
+-- 9. Storage bucket policies (Public access)
+CREATE POLICY "Public can view files" ON storage.objects FOR SELECT USING (bucket_id IN ('notes-files'));
+CREATE POLICY "Public can upload files" ON storage.objects FOR INSERT WITH CHECK (bucket_id IN ('notes-files'));
+CREATE POLICY "Public can update files" ON storage.objects FOR UPDATE USING (bucket_id IN ('notes-files'));
+CREATE POLICY "Public can delete files" ON storage.objects FOR DELETE USING (bucket_id IN ('notes-files'));
 
-CREATE POLICY "Users can upload files to their folder" 
-ON storage.objects FOR INSERT 
-WITH CHECK (
-    bucket_id = 'notes-attachments' 
-    AND auth.uid()::text = (storage.foldername(name))[2]
-);
-
-CREATE POLICY "Users can update their own files" 
-ON storage.objects FOR UPDATE 
-USING (bucket_id = 'notes-attachments' AND auth.uid()::text = (storage.foldername(name))[2]);
-
-CREATE POLICY "Users can delete their own files" 
-ON storage.objects FOR DELETE 
-USING (bucket_id = 'notes-attachments' AND auth.uid()::text = (storage.foldername(name))[2]);
