@@ -26,12 +26,12 @@ export default function SettingsPage() {
         setEmail(user.email || '')
         
         // Try to fetch from profiles table first
-        const { data: profile } = await supabase.from('profiles').select('full_name').eq('user_id', user.id).single()
+        const { data: profile } = await supabase.from('profiles').select('name').eq('user_id', user.id).single()
         
-        if (profile?.full_name) {
-          setName(profile.full_name)
-        } else if (user.user_metadata?.full_name) {
-          setName(user.user_metadata.full_name)
+        if (profile?.name) {
+          setName(profile.name)
+        } else if (user.user_metadata?.name) {
+          setName(user.user_metadata.name)
         }
       }
     }
@@ -77,12 +77,12 @@ export default function SettingsPage() {
       // Upsert into profiles table exactly as requested
       const { error: profileError } = await supabase.from('profiles').upsert({
         user_id: user.id,
-        full_name: name.trim(),
+        name: name.trim(),
+        email: user.email,
         updated_at: new Date().toISOString()
       }, { onConflict: 'user_id' })
 
-      // Fallback: If table doesn't exist, we still update auth state so UI works perfectly
-      await supabase.auth.updateUser({ data: { full_name: name.trim() } })
+      await supabase.auth.updateUser({ data: { name: name.trim() } })
 
       if (profileError && profileError.code !== '42P01') {
         throw profileError

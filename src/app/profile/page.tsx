@@ -21,11 +21,11 @@ export default function ProfilePage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         setUser(user)
-        const { data: profile } = await supabase.from('profiles').select('full_name').eq('user_id', user.id).single()
-        if (profile?.full_name) {
-          setProfileName(profile.full_name)
-        } else if (user.user_metadata?.full_name) {
-          setProfileName(user.user_metadata.full_name)
+        const { data: profile } = await supabase.from('profiles').select('name').eq('user_id', user.id).single()
+        if (profile?.name) {
+          setProfileName(profile.name)
+        } else if (user.user_metadata?.name) {
+          setProfileName(user.user_metadata.name)
         }
       }
 

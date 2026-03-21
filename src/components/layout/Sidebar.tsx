@@ -89,9 +89,9 @@ export function Sidebar() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         setUser(user)
-        const { data: profile } = await supabase.from('profiles').select('full_name').eq('user_id', user.id).single()
-        if (profile?.full_name) {
-          setUser({ ...user, user_metadata: { ...user.user_metadata, full_name: profile.full_name } })
+        const { data: profile } = await supabase.from('profiles').select('name').eq('user_id', user.id).single()
+        if (profile?.name) {
+          setUser({ ...user, user_metadata: { ...user.user_metadata, name: profile.name } })
         }
       }
     }
@@ -223,7 +223,7 @@ export function Sidebar() {
             <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-400 border-2 border-[#0a0f1d]" />
           </div>
           <div className="flex flex-col overflow-hidden">
-            <span className="text-[15px] font-bold text-white truncate group-hover:text-purple-300 transition-colors">{user?.user_metadata?.full_name || 'Student User'}</span>
+            <span className="text-[15px] font-bold text-white truncate group-hover:text-purple-300 transition-colors">{user?.user_metadata?.name || 'Student User'}</span>
             <span className="text-xs text-slate-400 font-medium truncate tracking-wide">Student Account</span>
           </div>
         </div>
