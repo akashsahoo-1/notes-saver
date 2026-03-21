@@ -19,7 +19,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/Input'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
@@ -42,6 +42,21 @@ export function Sidebar() {
   const [favoriteNotes, setFavoriteNotes] = useState<FavoriteNote[]>([])
   const [notesCount, setNotesCount] = useState(0)
   const [subjectsCount, setSubjectsCount] = useState(0)
+
+  const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const profileRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setIsProfileOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [profileRef])
 
   useEffect(() => {
     const fetchSubjects = async () => {
@@ -182,8 +197,11 @@ export function Sidebar() {
       </div>
 
       {/* User Info Bottom */}
-      <div className="mt-auto shrink-0 p-5 border-t border-white/5 bg-black/20">
-        <div className="flex items-center gap-4 p-2.5 rounded-2xl hover:bg-white/5 transition-colors cursor-pointer group pointer-events-auto">
+      <div className="mt-auto shrink-0 p-5 border-t border-white/5 bg-black/20 relative" ref={profileRef}>
+        <div 
+          onClick={() => setIsProfileOpen(!isProfileOpen)}
+          className="flex items-center gap-4 p-2.5 rounded-2xl hover:bg-white/5 transition-colors cursor-pointer group pointer-events-auto"
+        >
           <div className="relative h-11 w-11 shrink-0 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 p-0.5 shadow-lg shadow-purple-500/30 group-hover:scale-105 transition-transform duration-300">
             <div className="h-full w-full rounded-full bg-[#0a0f1d] flex items-center justify-center">
               <User className="h-5 w-5 text-purple-300" />
@@ -196,6 +214,30 @@ export function Sidebar() {
             <span className="text-xs text-slate-400 font-medium truncate tracking-wide">Pro Account</span>
           </div>
         </div>
+
+        <AnimatePresence>
+          {isProfileOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="absolute bottom-24 left-4 w-56 bg-[#0a0f1d]/90 backdrop-blur-xl rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 overflow-hidden z-50 p-1.5"
+            >
+              <div onClick={() => { setIsProfileOpen(false); router.push('/profile') }} className="p-3 hover:bg-white/10 rounded-xl cursor-pointer text-sm font-semibold text-white transition-colors">
+                My Profile
+              </div>
+              <div onClick={() => { setIsProfileOpen(false); router.push('/settings') }} className="p-3 hover:bg-white/10 rounded-xl cursor-pointer text-sm font-semibold text-white transition-colors">
+                Settings
+              </div>
+              <div className="h-px bg-white/10 my-1.5 mx-2" />
+              <div onClick={() => { setIsProfileOpen(false); handleLogout() }} className="p-3 hover:bg-red-500/10 rounded-xl cursor-pointer text-sm font-bold text-red-400 hover:text-red-300 transition-colors flex items-center gap-2">
+                <LogOut className="h-4 w-4" />
+                Logout
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )
