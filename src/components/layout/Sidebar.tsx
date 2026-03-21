@@ -100,28 +100,28 @@ export function Sidebar() {
   }
 
   const SidebarContent = (
-    <div className="flex h-full w-full flex-col bg-zinc-950/50 shadow-xl border-r border-zinc-900 backdrop-blur-xl">
+    <div className="flex h-full w-full flex-col bg-[#0f172a]/95 text-slate-100 shadow-2xl border-r border-slate-800 backdrop-blur-2xl">
       {/* Logo */}
-      <div className="flex h-16 items-center gap-3 px-6 border-b border-zinc-900 shrink-0">
-        <div className="flex items-center justify-center rounded-lg bg-zinc-800 p-2 shadow-inner">
-          <BookOpen className="h-5 w-5 text-zinc-100" />
+      <div className="flex h-16 items-center gap-3.5 px-6 border-b border-slate-800 shrink-0">
+        <div className="flex items-center justify-center rounded-xl bg-indigo-500 p-2 shadow-lg shadow-indigo-500/30">
+          <BookOpen className="h-5 w-5 text-white" />
         </div>
-        <span className="text-lg font-semibold tracking-tight text-zinc-100">Notes Saver</span>
+        <span className="text-xl font-bold tracking-tight text-white">Notes Saver</span>
       </div>
 
-      <div className="flex flex-col gap-5 overflow-y-auto p-4 custom-scrollbar flex-1">
+      <div className="flex flex-col gap-6 overflow-y-auto p-4 custom-scrollbar flex-1">
         {/* Search */}
         <div className="px-2">
           <Input
             placeholder="Search notes..."
-            icon={<Search className="h-4 w-4" />}
-            className="bg-zinc-900 border-zinc-800"
+            icon={<Search className="h-4 w-4 text-slate-400" />}
+            className="bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-500 focus:bg-[#1e293b] rounded-xl"
           />
         </div>
 
         {/* Overview nav */}
-        <nav className="flex flex-col gap-1 px-2">
-          <h2 className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+        <nav className="flex flex-col gap-1.5 px-2">
+          <h2 className="mb-2.5 px-2 text-[11px] font-bold uppercase tracking-widest text-slate-500/80">
             Overview
           </h2>
           <NavItem href="/dashboard/notes"        icon={FileText}   label="All Notes"    active={pathname === '/dashboard/notes'} />
@@ -130,9 +130,9 @@ export function Sidebar() {
 
         {/* Favorites */}
         {favoriteNotes.length > 0 && (
-          <div className="flex flex-col gap-1 px-2">
-            <h2 className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
-              <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
+          <div className="flex flex-col gap-1.5 px-2">
+            <h2 className="mb-2.5 px-2 text-[11px] font-bold uppercase tracking-widest text-slate-500/80 flex items-center gap-1.5">
+              <Star className="h-3 w-3 text-yellow-400 fill-yellow-400 opacity-80" />
               Favorites
             </h2>
             {favoriteNotes.map((note) => (
@@ -142,27 +142,28 @@ export function Sidebar() {
                 icon={Star}
                 label={note.title}
                 active={pathname === `/dashboard/notes/${note.id}`}
-                iconClassName="text-amber-400 fill-amber-400"
+                iconClassName="text-yellow-400 fill-yellow-400/50"
               />
             ))}
           </div>
         )}
 
         {/* Subjects */}
-        <div className="flex flex-col gap-1 px-2">
-          <div className="mb-2 flex items-center justify-between px-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+        <div className="flex flex-col gap-1.5 px-2">
+          <div className="mb-2.5 flex items-center justify-between px-2">
+            <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-500/80">
               Subjects
             </h2>
             <Link
               href="/dashboard/subjects"
-              className="text-zinc-400 hover:text-zinc-100 transition-colors"
+              className="text-slate-400 hover:text-indigo-400 transition-colors p-1 rounded-md hover:bg-indigo-500/10"
+              aria-label="Add Subject"
             >
               <PlusCircle className="h-4 w-4" />
             </Link>
           </div>
           {subjects.length === 0 ? (
-            <div className="px-2 py-3 text-sm text-zinc-500">No subjects yet</div>
+            <div className="px-3 py-4 text-sm text-slate-500 bg-slate-800/30 rounded-xl text-center border border-slate-800/50 border-dashed">No subjects yet</div>
           ) : (
             subjects.map((subject) => (
               <NavItem
@@ -182,12 +183,14 @@ export function Sidebar() {
   return (
     <>
       {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 left-0 z-40 w-full bg-zinc-950/80 backdrop-blur-md border-b border-zinc-900 p-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <BookOpen className="h-5 w-5 text-zinc-100" />
-          <span className="font-semibold text-zinc-100">Notes Saver</span>
+      <div className="md:hidden fixed top-0 left-0 z-40 w-full bg-[#0f172a]/90 backdrop-blur-xl border-b border-slate-800 p-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="bg-indigo-500 p-1.5 rounded-lg shadow-sm">
+            <BookOpen className="h-5 w-5 text-white" />
+          </div>
+          <span className="font-bold text-white tracking-tight">Notes Saver</span>
         </div>
-        <button className="text-zinc-400" onClick={() => setIsOpen(true)}>
+        <button className="text-slate-400 hover:text-white transition-colors" onClick={() => setIsOpen(true)}>
           <Menu className="h-6 w-6" />
         </button>
       </div>
@@ -199,7 +202,7 @@ export function Sidebar() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+            className="fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm md:hidden"
             onClick={() => setIsOpen(false)}
           />
         )}
@@ -207,14 +210,14 @@ export function Sidebar() {
 
       <motion.aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-72 transform md:relative md:translate-x-0 transition-transform duration-300',
+          'fixed inset-y-0 left-0 z-50 w-[280px] transform md:relative md:translate-x-0 transition-transform duration-300 ease-out',
           isOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
         {SidebarContent}
         {isOpen && (
           <button
-            className="absolute top-4 right-4 text-zinc-400 md:hidden"
+            className="absolute top-4 right-4 text-slate-400 hover:bg-slate-800 p-1 rounded-full transition-colors md:hidden"
             onClick={() => setIsOpen(false)}
           >
             <X className="h-6 w-6" />
@@ -242,14 +245,16 @@ function NavItem({ href, icon: Icon, label, active, iconClassName }: NavItemProp
     <Link
       href={href}
       className={cn(
-        'group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-        active ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-100'
+        'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200',
+        active 
+          ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/20 shadow-inner' 
+          : 'text-slate-400 hover:bg-[#1e293b] hover:text-slate-100 hover:shadow-sm'
       )}
     >
       <Icon
         className={cn(
-          'h-4 w-4 shrink-0',
-          iconClassName ?? (active ? 'text-zinc-50' : 'text-zinc-500 group-hover:text-zinc-300')
+          'h-4 w-4 shrink-0 transition-colors',
+          iconClassName ?? (active ? 'text-white' : 'text-slate-500 group-hover:text-indigo-400')
         )}
       />
       <span className="truncate">{label}</span>
