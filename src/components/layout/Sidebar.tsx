@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/Input'
@@ -42,7 +43,7 @@ export function Sidebar() {
   const [favoriteNotes, setFavoriteNotes] = useState<FavoriteNote[]>([])
   const [notesCount, setNotesCount] = useState(0)
   const [subjectsCount, setSubjectsCount] = useState(0)
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<SupabaseUser | null>(null)
 
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const profileRef = useRef<HTMLDivElement>(null)
@@ -238,15 +239,19 @@ export function Sidebar() {
           className="flex items-center gap-4 p-2.5 rounded-2xl hover:bg-white/5 transition-colors cursor-pointer group pointer-events-auto"
         >
           <div className="relative h-11 w-11 shrink-0 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 p-0.5 shadow-lg shadow-purple-500/30 group-hover:scale-105 transition-transform duration-300">
-            <div className="h-full w-full rounded-full bg-[#0a0f1d] flex items-center justify-center">
-              <User className="h-5 w-5 text-purple-300" />
+            <div className="h-full w-full rounded-full bg-[#0a0f1d] flex items-center justify-center overflow-hidden">
+              {user?.user_metadata?.avatar_url ? (
+                <img src={user.user_metadata.avatar_url} alt="Profile" className="h-full w-full object-cover" />
+              ) : (
+                <User className="h-5 w-5 text-purple-300" />
+              )}
             </div>
             {/* Online Indicator */}
             <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-400 border-2 border-[#0a0f1d]" />
           </div>
           <div className="flex flex-col overflow-hidden">
-            <span className="text-[15px] font-bold text-white truncate group-hover:text-purple-300 transition-colors">{user?.user_metadata?.name || 'Student User'}</span>
-            <span className="text-xs text-slate-400 font-medium truncate tracking-wide">Student Account</span>
+            <span className="text-[15px] font-bold text-white truncate group-hover:text-purple-300 transition-colors">{user?.user_metadata?.full_name || user?.user_metadata?.name || 'Student User'}</span>
+            <span className="text-xs text-slate-400 font-medium truncate tracking-wide">{user?.user_metadata?.email || user?.email || 'Student Account'}</span>
           </div>
         </div>
 
